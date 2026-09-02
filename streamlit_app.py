@@ -3,6 +3,8 @@ import base64
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from streamlit_folium import st_folium
 import folium
 
@@ -30,6 +32,54 @@ st.set_page_config(
 def html(content: str):
     cleaned = re.sub(r"(?m)^[ \t]+", "", content.strip())
     st.markdown(cleaned, unsafe_allow_html=True)
+
+
+def to_roman(n: int) -> str:
+    vals = [
+        (1000, "M"), (900, "CM"), (500, "D"), (400, "CD"),
+        (100, "C"), (90, "XC"), (50, "L"), (40, "XL"),
+        (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I"),
+    ]
+    result = ""
+    for v, sym in vals:
+        while n >= v:
+            result += sym
+            n -= v
+    return result
+
+
+def styled_table_html(df, format_map):
+    """Render dataframe jadi tabel HTML bergaya biru tua seperti Excel."""
+    return (
+        df.style
+        .format(format_map)
+        .set_table_styles([
+            {"selector": "th", "props": [
+                ("background-color", "#1F4E78"),
+                ("color", "#ffffff"),
+                ("font-weight", "700"),
+                ("text-align", "left"),
+                ("padding", "9px 12px"),
+                ("font-size", "0.8rem"),
+                ("border", "none"),
+            ]},
+            {"selector": "td", "props": [
+                ("padding", "8px 12px"),
+                ("border-bottom", "1px solid #edf1f5"),
+                ("font-size", "0.83rem"),
+                ("color", "#334155"),
+            ]},
+            {"selector": "tr:hover td", "props": [
+                ("background-color", "#f5f8fc"),
+            ]},
+            {"selector": "table", "props": [
+                ("border-collapse", "collapse"),
+                ("width", "100%"),
+            ]},
+        ])
+        .hide(axis="index")
+        .to_html()
+    )
 
 
 @st.cache_data
@@ -397,6 +447,251 @@ def load_data(file_source):
     return df_ro, df_paket
 
 
+def find_lokasi_col(df):
+    """Cari kolom 'tabel lokasi' (Kabupaten/Kota) di 'Daftar Paket'.
+
+    Pada data sumber, kolom ini biasanya bernama 'Provinsi/Lokasi RO'
+    (bukan 'Kabupaten/Kota'), jadi dicari lewat daftar nama prioritas
+    dulu sebelum jatuh ke pencocokan kata kunci umum.
+    """
+    priority_names = [
+        "Provinsi/Lokasi RO", "Lokasi RO", "Kabupaten/Kota",
+        "Kab/Kota", "Kota/Kabupaten", "Lokasi",
+    ]
+    for name in priority_names:
+        if name in df.columns:
+            return name
+    for c in df.columns:
+        cl = c.lower()
+        if "kabupaten" in cl or ("lokasi" in cl and "ro" in cl):
+            return c
+    return None
+
+
+# Prefix yang dihapus supaya "Kab. Deli Serdang" dan "Deli Serdang" (kalau
+# muncul keduanya di data) dianggap kabupaten yang sama. Prefix "Kota "
+# sengaja TIDAK dihapus karena dipakai sebagai bagian nama kota.
+_LOKASI_PREFIXES = ["Kab. ", "Kabupaten "]
+
+
+def normalize_lokasi(raw) -> str | None:
+    if pd.isna(raw):
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    for pref in _LOKASI_PREFIXES:
+        if s.startswith(pref):
+            s = s[len(pref):].strip()
+            break
+    return s or None
+
+
+def is_specific_kabupaten(raw, provinsi_name: str) -> bool:
+    """True kalau nilai kolom lokasi merujuk ke SATU kabupaten/kota yang jelas
+    (bukan 'Tersebar', bukan gabungan beberapa kabupaten, bukan nama provinsi
+    itu sendiri). Baris yang False dianggap paket 'tingkat provinsi' (tidak
+    terikat kabupaten/kota tertentu)."""
+    if pd.isna(raw):
+        return False
+    s = str(raw).strip()
+    if not s:
+        return False
+    low = s.lower()
+    if "tersebar" in low:
+        return False
+    if "," in s or " dan " in low:
+        return False
+    if low.startswith("provinsi") or low.startswith("prov."):
+        return False
+    prov_clean = re.sub(r"(?i)^provinsi\s+", "", str(provinsi_name)).strip().lower()
+    if low == prov_clean:
+        return False
+    norm = normalize_lokasi(s)
+    if norm is None or len(norm) > 25:
+        return False
+    return True
+
+
+# =========================================================
+# 3b. HELPER: TABEL RINCIAN ITEM + GRAFIK GABUNGAN
+# =========================================================
+# Menghasilkan tampilan seperti contoh:
+#   "Ringkasan Paket Tingkat <Level> - <Nama>"
+#   + tabel item (No, Nama Paket, Pagu, Realisasi, Real.Keu%, Real.Fis%)
+#   + grafik gabungan "Pagu vs Realisasi per Item - <Nama>"
+#     (bar Pagu & Realisasi, line Real.Keu% & Real.Fis% pada sumbu kedua)
+
+def render_rincian_item(df_items: pd.DataFrame, level_label: str, level_name: str):
+    if df_items.empty:
+        st.info(f"Tidak ada data paket untuk {level_label} {level_name} pada filter saat ini.")
+        return
+
+    # Salin dataframe agar tidak merubah dataframe asli yang sedang diproses
+    df_item = df_items.sort_values(
+        "Pagu (paket) (Rp ribu)", ascending=False
+    ).reset_index(drop=True).copy()
+
+    df_item["Real. Keu (%)"] = (
+        df_item["Realisasi (paket) (Rp ribu)"] / df_item["Pagu (paket) (Rp ribu)"] * 100
+    ).fillna(0)
+
+    # Cek & hapus kolom 'No' jika sudah ada sebelum disisipkan kembali
+    if "No" in df_item.columns:
+        df_item = df_item.drop(columns=["No"])
+    
+    df_item.insert(0, "No", df_item.index + 1)
+
+    df_item_display = df_item[
+        [
+            "No",
+            "Nama Paket",
+            "Pagu (paket) (Rp ribu)",
+            "Realisasi (paket) (Rp ribu)",
+            "Real. Keu (%)",
+            "Real. Fis (%)",
+        ]
+    ].rename(columns={
+        "Pagu (paket) (Rp ribu)": "Pagu (Rp ribu)",
+        "Realisasi (paket) (Rp ribu)": "Realisasi (Rp ribu)",
+    })
+    df_item_display["Real. Fis (%)"] = df_item_display["Real. Fis (%)"].fillna(0)
+
+    # --- Judul Sub-Blok ---
+    if level_label == "Provinsi":
+        subtitle = (
+            f"Rincian item pada blok 'Provinsi {level_name}' "
+            f"(paket yang tidak terikat kabupaten/kota tertentu), dalam Rp ribu"
+        )
+    else:
+        subtitle = f"Rincian item paket yang berlokasi di {level_label} {level_name}, dalam Rp ribu"
+
+    html(f"""
+    <div style="font-size:0.95rem; font-weight:800; color:#1F4E78; margin-bottom:2px;">
+        Ringkasan Paket Tingkat {level_label} - {level_name}
+    </div>
+    <div style="font-size:0.74rem; color:#94a3b8; font-family: 'Segoe UI', sans-serif; font-style: italic; margin-bottom:12px;">
+        {subtitle}
+    </div>
+    """)
+
+    # --- Tabel Item (Gaya Excel Header Biru) ---
+    item_table_html = styled_table_html(
+        df_item_display,
+        {
+            "Pagu (Rp ribu)": "{:,.0f}".format,
+            "Realisasi (Rp ribu)": "{:,.0f}".format,
+            "Real. Keu (%)": "{:.2f}%".format,
+            "Real. Fis (%)": "{:.2f}%".format,
+        },
+    ).replace(",", ".")  # Format ribuan titik ala Excel Indonesia
+
+    html(item_table_html)
+    html('<div style="height:14px;"></div>')
+
+    # --- Grafik Gabungan (Pagu vs Realisasi + Garis Persentase) ---
+    fig_combo = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # Bar Pagu (Biru)
+    fig_combo.add_trace(
+        go.Bar(
+            x=df_item_display["No"],
+            y=df_item_display["Pagu (Rp ribu)"],
+            name="Pagu (Rp ribu)",
+            marker_color="#4682B4",
+        ),
+        secondary_y=False,
+    )
+    # Bar Realisasi (Merah/Cokelat)
+    fig_combo.add_trace(
+        go.Bar(
+            x=df_item_display["No"],
+            y=df_item_display["Realisasi (Rp ribu)"],
+            name="Realisasi (Rp ribu)",
+            marker_color="#C0392B",
+        ),
+        secondary_y=False,
+    )
+    # Line Realisasi Keuangan % (Hijau)
+    fig_combo.add_trace(
+        go.Scatter(
+            x=df_item_display["No"],
+            y=df_item_display["Real. Keu (%)"],
+            name="Real. Keu (%)",
+            mode="lines+markers",
+            line=dict(color="#7CB5EC", width=3),
+            marker=dict(size=6, symbol="diamond"),
+        ),
+        secondary_y=True,
+    )
+    # Line Realisasi Fisik % (Ungu)
+    fig_combo.add_trace(
+        go.Scatter(
+            x=df_item_display["No"],
+            y=df_item_display["Real. Fis (%)"],
+            name="Real. Fis (%)",
+            mode="lines+markers",
+            line=dict(color="#90ED7D", width=3),
+            marker=dict(size=6, symbol="square"),
+        ),
+        secondary_y=True,
+    )
+
+    fig_combo.update_layout(
+        title=dict(
+            text=f"<b>Pagu vs Realisasi per Item - {level_name}</b>",
+            font=dict(size=16, family="Segoe UI, Arial", color="#000000"),
+            x=0.5,
+            xanchor="center"
+        ),
+        barmode="group",
+        height=450,
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        font=dict(family="Segoe UI, Arial", size=11, color="#000000"),
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=0.7,
+            xanchor="left",
+            x=1.12,
+            bordercolor="#d1d5db",
+            borderwidth=1
+        ),
+        margin=dict(l=60, r=120, t=50, b=50),
+        hovermode="x unified",
+    )
+
+    # Sumbu X (Nomor Urut Item)
+    fig_combo.update_xaxes(
+        title_text="",
+        showgrid=True,
+        gridcolor="#E0E0E0",
+        dtick=1,
+        tickfont=dict(size=11, color="#000000")
+    )
+    
+    # Sumbu Y Kiri (Angka Pagu/Realisasi Rp ribu)
+    fig_combo.update_yaxes(
+        title_text="<b>Rp ribu</b>",
+        showgrid=True,
+        gridcolor="#E0E0E0",
+        secondary_y=False,
+        tickformat=",.0f",
+        zeroline=True,
+        zerolinecolor="#000000"
+    )
+
+    # Sumbu Y Kanan (Persentase %)
+    fig_combo.update_yaxes(
+        title_text="<b>Persentase (%)</b>",
+        showgrid=False,
+        secondary_y=True,
+        ticksuffix="%",
+        range=[0, max(100, df_item_display["Real. Keu (%)"].max() * 1.1)]
+    )
+
+    st.plotly_chart(fig_combo, use_container_width=True, config={"displayModeBar": False})
 
 # =========================================================
 # 4. SIDEBAR
@@ -460,6 +755,22 @@ with st.sidebar:
     if not data_ok:
         st.stop()
 
+    # Kolom "tabel lokasi" (di data ini: 'Provinsi/Lokasi RO') dideteksi
+    # sekali di sini, dipakai baik untuk filter sidebar maupun semua section
+    # di bawah. Kolom bantu '_lokasi_clean' berisi nama kabupaten/kota yang
+    # sudah dirapikan HANYA untuk baris yang jelas terikat 1 kabupaten/kota;
+    # baris "Tersebar", gabungan beberapa kabupaten, atau level provinsi
+    # akan bernilai None (dan masuk ke blok "Rincian Paket per Provinsi").
+    LOKASI_COL = find_lokasi_col(df_paket)
+    if LOKASI_COL is not None:
+        df_paket["_lokasi_clean"] = df_paket.apply(
+            lambda r: normalize_lokasi(r[LOKASI_COL])
+            if is_specific_kabupaten(r[LOKASI_COL], r["Provinsi"]) else None,
+            axis=1,
+        )
+    else:
+        df_paket["_lokasi_clean"] = None
+
     html('<div class="sidebar-filters">')
 
     html('<div class="filter-title">🏢&nbsp; Unit Organisasi</div>')
@@ -477,6 +788,24 @@ with st.sidebar:
     selected_prov = st.selectbox(
         "Provinsi", prov_options, label_visibility="collapsed"
     )
+
+    # --- Filter Kabupaten/Kota, opsinya mengikuti Provinsi yang dipilih ---
+    html('<div class="filter-title">🏘️&nbsp; Kabupaten/Kota</div>')
+    if LOKASI_COL is not None:
+        kab_source = df_paket if selected_prov == "Semua" else df_paket[df_paket["Provinsi"] == selected_prov]
+        kab_options = ["Semua"] + sorted(
+            kab_source["_lokasi_clean"].dropna().astype(str).unique().tolist()
+        )
+        selected_kab = st.selectbox(
+            "Kabupaten/Kota", kab_options, label_visibility="collapsed"
+        )
+    else:
+        selected_kab = "Semua"
+        html("""
+        <div class="info-box" style="font-size:0.74rem;">
+            Kolom lokasi (Kabupaten/Kota) tidak ditemukan pada data 'Daftar Paket'.
+        </div>
+        """)
 
     html('<div class="filter-title">🧱&nbsp; Kategori Pekerjaan</div>')
     kategori_options = ["Semua"] + sorted(
@@ -508,6 +837,9 @@ if selected_unor != "Semua":
 
 if selected_prov != "Semua":
     df_filtered = df_filtered[df_filtered["Provinsi"] == selected_prov]
+
+if LOKASI_COL is not None and selected_kab != "Semua":
+    df_filtered = df_filtered[df_filtered["_lokasi_clean"] == selected_kab]
 
 if selected_kategori != "Semua":
     df_filtered = df_filtered[df_filtered["Kategori"] == selected_kategori]
@@ -697,6 +1029,179 @@ with progress_col2:
     </div>
     </div>
     """)
+
+
+# =========================================================
+# 9b. RINGKASAN REALISASI PER PROVINSI (gaya tabel Excel)
+# =========================================================
+
+html('<div class="section-title">🗂️ Ringkasan Realisasi Paket per Provinsi</div>')
+
+df_prov_summary = (
+    df_filtered
+    .groupby("Provinsi")
+    .agg(**{
+        "Pagu (Rp ribu)": ("Pagu (paket) (Rp ribu)", "sum"),
+        "Realisasi (Rp ribu)": ("Realisasi (paket) (Rp ribu)", "sum"),
+        "Real. Fis (%)": ("Real. Fis (%)", "mean"),
+    })
+    .reset_index()
+)
+
+df_prov_summary["Real. Keu (%)"] = (
+    df_prov_summary["Realisasi (Rp ribu)"] / df_prov_summary["Pagu (Rp ribu)"] * 100
+).fillna(0)
+
+df_prov_summary = df_prov_summary[
+    ["Provinsi", "Pagu (Rp ribu)", "Realisasi (Rp ribu)", "Real. Keu (%)", "Real. Fis (%)"]
+].sort_values("Pagu (Rp ribu)", ascending=False)
+
+html('<div class="content-card">')
+html("""
+<div style="font-size:0.95rem; font-weight:800; color:#1F4E78; margin-bottom:2px;">
+    Ringkasan Realisasi Paket Rehabilitasi &amp; Rekonstruksi per Provinsi
+</div>
+<div style="font-size:0.74rem; color:#94a3b8; margin-bottom:12px;">
+    Dihitung otomatis dari data yang sedang difilter (dalam Rp ribu)
+</div>
+""")
+
+if not df_prov_summary.empty:
+    prov_table_html = styled_table_html(
+        df_prov_summary,
+        {
+            "Pagu (Rp ribu)": "{:,.0f}",
+            "Realisasi (Rp ribu)": "{:,.0f}",
+            "Real. Keu (%)": "{:.2f}%",
+            "Real. Fis (%)": "{:.2f}%",
+        },
+    )
+    html(prov_table_html)
+else:
+    st.info("Tidak ada data provinsi untuk pilihan filter saat ini.")
+
+html("</div>")
+
+
+# =========================================================
+# 9b2. RINGKASAN REALISASI PER KABUPATEN/KOTA (tab per provinsi)
+# =========================================================
+
+html('<div class="section-title">🏘️ Ringkasan Realisasi Paket per Kabupaten/Kota</div>')
+html('<div class="content-card">')
+
+if LOKASI_COL is None:
+    st.info(
+        "Kolom lokasi (Kabupaten/Kota) tidak ditemukan pada data (sheet 'Daftar Paket'). "
+        "Tambahkan kolom seperti 'Provinsi/Lokasi RO' atau 'Kabupaten/Kota' pada data agar ringkasan ini bisa ditampilkan."
+    )
+elif df_prov_summary.empty:
+    st.info("Tidak ada data provinsi untuk pilihan filter saat ini.")
+else:
+    province_list = df_prov_summary["Provinsi"].tolist()
+    kab_tabs = st.tabs(province_list)
+
+    for tab, prov in zip(kab_tabs, province_list):
+        with tab:
+            df_kab = df_filtered[
+                (df_filtered["Provinsi"] == prov)
+                & df_filtered["_lokasi_clean"].notna()
+            ].copy()
+
+            if df_kab.empty:
+                st.info(f"Tidak ada data kabupaten/kota untuk provinsi {prov} pada filter saat ini.")
+                continue
+
+            df_kab_summary = (
+                df_kab
+                .groupby("_lokasi_clean")
+                .agg(**{
+                    "Pagu (Rp ribu)": ("Pagu (paket) (Rp ribu)", "sum"),
+                    "Realisasi (Rp ribu)": ("Realisasi (paket) (Rp ribu)", "sum"),
+                    "Real. Fis (%)": ("Real. Fis (%)", "mean"),
+                })
+                .reset_index()
+                .rename(columns={"_lokasi_clean": "Kabupaten/Kota"})
+            )
+
+            df_kab_summary["Real. Keu (%)"] = (
+                df_kab_summary["Realisasi (Rp ribu)"] / df_kab_summary["Pagu (Rp ribu)"] * 100
+            ).fillna(0)
+
+            df_kab_summary = df_kab_summary.sort_values(
+                "Pagu (Rp ribu)", ascending=False
+            ).reset_index(drop=True)
+
+            df_kab_summary.insert(
+                0, "No", [to_roman(i + 1) for i in range(len(df_kab_summary))]
+            )
+
+            df_kab_summary = df_kab_summary[
+                ["No", "Kabupaten/Kota", "Pagu (Rp ribu)", "Realisasi (Rp ribu)", "Real. Keu (%)", "Real. Fis (%)"]
+            ]
+
+            kab_table_html = styled_table_html(
+                df_kab_summary,
+                {
+                    "Pagu (Rp ribu)": "{:,.0f}",
+                    "Realisasi (Rp ribu)": "{:,.0f}",
+                    "Real. Keu (%)": "{:.2f}%",
+                    "Real. Fis (%)": "{:.2f}%",
+                },
+            )
+            html(kab_table_html)
+
+html("</div>")
+
+
+# =========================================================
+# 9c. RINCIAN PAKET PER PROVINSI / KABUPATEN (+ grafik)
+# =========================================================
+# Perilaku mengikuti filter yang aktif di sidebar:
+#   - Kalau Kabupaten/Kota dipilih  -> tampilkan 1 blok untuk kabupaten itu
+#     (datanya diambil dari kolom "tabel lokasi" Kabupaten/Kota).
+#   - Kalau hanya Provinsi dipilih  -> tampilkan 1 blok untuk provinsi itu
+#     (menggabungkan semua kabupaten di provinsi tsb).
+#   - Kalau keduanya "Semua"        -> tampilkan tab per provinsi seperti semula,
+#     masing-masing tab berisi tabel + grafik untuk provinsi tsb.
+
+html('<div class="section-title">📑 Rincian Paket per Provinsi / Kabupaten</div>')
+html('<div class="content-card">')
+
+
+def strip_provinsi_prefix(name: str) -> str:
+    return re.sub(r"(?i)^provinsi\s+", "", str(name)).strip()
+
+
+if LOKASI_COL is not None and selected_kab != "Semua":
+    # Level Kabupaten/Kota — datanya sudah otomatis terfilter di df_filtered
+    render_rincian_item(df_filtered, "Kabupaten/Kota", selected_kab)
+
+elif selected_prov != "Semua":
+    # Level Provinsi tunggal — hanya paket yang TIDAK terikat kabupaten/kota
+    # tertentu (Tersebar / gabungan beberapa kabupaten / level provinsi).
+    df_item_prov = df_filtered[df_filtered["_lokasi_clean"].isna()].copy() \
+        if LOKASI_COL is not None else df_filtered
+    render_rincian_item(df_item_prov, "Provinsi", strip_provinsi_prefix(selected_prov))
+
+else:
+    # Tidak ada Provinsi/Kabupaten spesifik dipilih -> tab per provinsi
+    province_list = df_prov_summary["Provinsi"].tolist()
+
+    if province_list:
+        prov_tabs = st.tabs([strip_provinsi_prefix(p) for p in province_list])
+
+        for tab, prov in zip(prov_tabs, province_list):
+            with tab:
+                df_item_prov = df_filtered[
+                    (df_filtered["Provinsi"] == prov)
+                    & (df_filtered["_lokasi_clean"].isna() if LOKASI_COL is not None else True)
+                ].copy()
+                render_rincian_item(df_item_prov, "Provinsi", strip_provinsi_prefix(prov))
+    else:
+        st.info("Tidak ada data untuk ditampilkan pada pilihan filter saat ini.")
+
+html("</div>")
 
 
 # =========================================================
