@@ -1,6 +1,819 @@
+import re
+import base64
 import streamlit as st
+import pandas as pd
+import plotly.express as px
+from streamlit_folium import st_folium
+import folium
 
-st.title("🎈 My new app")
-st.write(
-    "Let's start building! For help and inspiration, head over to [docs.streamlit.io](https://docs.streamlit.io/)."
+
+# =========================================================
+# 1. PAGE CONFIG
+# =========================================================
+
+st.set_page_config(
+    page_title="Dashboard Paket Bencana RR",
+    page_icon="🏗️",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
+
+
+# =========================================================
+# HELPER: render HTML tanpa kena "code block" markdown
+# =========================================================
+# Streamlit/Markdown akan menganggap baris berindentasi 4+ spasi
+# sebagai code block, sehingga tag HTML tampil sebagai teks mentah.
+# Fungsi ini menghapus semua indentasi di awal tiap baris sebelum
+# dirender, sehingga HTML selalu ter-render dengan benar.
+
+def html(content: str):
+    cleaned = re.sub(r"(?m)^[ \t]+", "", content.strip())
+    st.markdown(cleaned, unsafe_allow_html=True)
+
+
+@st.cache_data
+def get_logo_base64(path: str):
+    try:
+        with open(path, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    except Exception:
+        return None
+
+
+LOGO_PATH = "logo-pu.png"
+LOGO_B64 = get_logo_base64(LOGO_PATH)
+
+
+# =========================================================
+# 2. CUSTOM CSS
+# =========================================================
+
+html("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
+}
+
+.stApp {
+    background: #f5f7fb;
+}
+
+.block-container {
+    padding-top: 1.5rem;
+    padding-bottom: 3rem;
+    max-width: 1500px;
+}
+
+/* SIDEBAR */
+section[data-testid="stSidebar"] {
+    background: #ffffff;
+    border-right: 1px solid #e7ebf2;
+}
+section[data-testid="stSidebar"] > div {
+    padding-top: 1.5rem;
+}
+section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] {
+    gap: 0.6rem !important;
+}
+
+.sidebar-brand {
+    padding: 6px 18px 16px 18px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #eef1f6;
+    text-align: center;
+}
+.sidebar-brand img {
+    width: 100%;
+    max-width: 220px;
+    height: auto;
+    object-fit: contain;
+}
+.sidebar-brand-fallback {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #0f2747;
+}
+
+.sidebar-filters {
+    padding: 4px 18px 0 18px;
+    margin-top: 16px;
+}
+.sidebar-brand + .sidebar-filters {
+    margin-top: 12px;
+}
+
+.filter-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #52627a;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-top: 14px;
+    margin-bottom: 6px;
+}
+.filter-title:first-child {
+    margin-top: 0;
+}
+
+/* Kotak filter (selectbox) — bergaya "kotakan abu" konsisten
+   baik dalam keadaan diam maupun terbuka */
+section[data-testid="stSidebar"] div[data-baseweb="select"] > div {
+    background-color: #f4f6fa !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 10px !important;
+    min-height: 38px;
+    box-shadow: none !important;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+section[data-testid="stSidebar"] div[data-baseweb="select"] > div:hover {
+    background-color: #eef2f8 !important;
+    border-color: #cbd5e1 !important;
+}
+section[data-testid="stSidebar"] div[data-baseweb="select"]:focus-within > div {
+    background-color: #ffffff !important;
+    border-color: #176b91 !important;
+    box-shadow: 0 0 0 3px rgba(23, 107, 145, 0.12) !important;
+}
+section[data-testid="stSidebar"] div[data-baseweb="select"] span {
+    color: #1e293b !important;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+section[data-testid="stSidebar"] div[data-baseweb="select"] svg {
+    fill: #64748b !important;
+}
+
+/* FILE UPLOADER */
+section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {
+    background-color: #f4f6fa !important;
+    border: 1.5px dashed #cbd5e1 !important;
+    border-radius: 12px !important;
+    padding: 10px 8px !important;
+}
+section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]:hover {
+    border-color: #176b91 !important;
+    background-color: #eef4f8 !important;
+}
+section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] small {
+    color: #8290a3 !important;
+}
+section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button {
+    border-radius: 8px !important;
+    border: 1px solid #dce3ec !important;
+    background: #ffffff !important;
+    color: #124d7c !important;
+    font-weight: 700 !important;
+}
+
+.upload-status {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-top: 8px;
+}
+.upload-ok {
+    background: #eafaf1;
+    border: 1px solid #b9ecd0;
+    color: #0f7a4b;
+}
+.upload-default {
+    background: #f4f6fa;
+    border: 1px solid #e2e8f0;
+    color: #64748b;
+    font-weight: 500;
+}
+.upload-meta {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: #4b9d78;
+}
+
+/* HEADER */
+.dashboard-header {
+    position: relative;
+    overflow: hidden;
+    padding: 30px 34px;
+    border-radius: 18px;
+    margin-bottom: 25px;
+    background:
+        radial-gradient(circle at 95% 15%, rgba(255, 196, 0, 0.28), transparent 25%),
+        linear-gradient(135deg, #0d2b4f 0%, #124d7c 55%, #176b91 100%);
+    box-shadow: 0 10px 30px rgba(15, 39, 71, 0.16);
+}
+.dashboard-header::after {
+    content: "";
+    position: absolute;
+    right: -80px;
+    bottom: -100px;
+    width: 280px;
+    height: 280px;
+    border: 35px solid rgba(255,255,255,0.05);
+    border-radius: 50%;
+}
+.header-label {
+    color: #ffd43b;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1.3px;
+    margin-bottom: 8px;
+}
+.dashboard-header h1 {
+    color: #ffffff !important;
+    font-size: 2rem;
+    font-weight: 800;
+    margin: 0;
+    line-height: 1.2;
+}
+.dashboard-header p {
+    color: #dceaf5;
+    font-size: 0.92rem;
+    margin-top: 10px;
+    margin-bottom: 0;
+}
+
+/* SECTION TITLE */
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #162b49;
+    margin-top: 28px;
+    margin-bottom: 15px;
+}
+.section-title::before {
+    content: "";
+    width: 5px;
+    height: 22px;
+    border-radius: 8px;
+    background: #f5b700;
+}
+
+/* METRIC CARD */
+.metric-card {
+    position: relative;
+    overflow: hidden;
+    background: #ffffff;
+    border: 1px solid #e8edf3;
+    border-radius: 16px;
+    padding: 20px 21px;
+    min-height: 135px;
+    box-shadow: 0 5px 18px rgba(15, 39, 71, 0.055);
+    transition: all 0.2s ease;
+}
+.metric-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 25px rgba(15, 39, 71, 0.10);
+}
+.metric-card::after {
+    content: "";
+    position: absolute;
+    width: 80px;
+    height: 80px;
+    right: -25px;
+    bottom: -30px;
+    border-radius: 50%;
+    background: rgba(15, 76, 129, 0.04);
+}
+.metric-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.metric-icon {
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    font-size: 18px;
+}
+.metric-title {
+    color: #718096;
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.metric-value {
+    color: #102a43;
+    font-size: 1.48rem;
+    font-weight: 800;
+    margin-top: 13px;
+}
+.metric-sub {
+    color: #8290a3;
+    font-size: 0.76rem;
+    margin-top: 4px;
+}
+
+/* CONTENT CARD */
+.content-card {
+    background: #ffffff;
+    border: 1px solid #e8edf3;
+    border-radius: 16px;
+    padding: 18px 20px;
+    box-shadow: 0 5px 18px rgba(15, 39, 71, 0.045);
+    margin-bottom: 20px;
+}
+
+/* INFO BOX */
+.info-box {
+    background: #f8fafc;
+    border: 1px solid #e8edf3;
+    border-radius: 12px;
+    padding: 14px 16px;
+    color: #526173;
+    font-size: 0.82rem;
+}
+
+/* TABLE */
+div[data-testid="stDataFrame"] {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+/* TABS */
+button[data-baseweb="tab"] {
+    font-weight: 700;
+    color: #64748b;
+}
+button[data-baseweb="tab"][aria-selected="true"] {
+    color: #0f4c81;
+}
+
+/* BUTTON */
+.stButton > button {
+    border-radius: 9px;
+    border: 1px solid #dce3ec;
+    font-weight: 600;
+}
+
+/* FOOTER */
+.dashboard-footer {
+    text-align: center;
+    color: #94a3b8;
+    font-size: 0.72rem;
+    padding-top: 25px;
+    margin-top: 35px;
+    border-top: 1px solid #e5eaf0;
+}
+</style>
+""")
+
+
+# =========================================================
+# 3. DATA LOADING
+# =========================================================
+
+DEFAULT_FILE_PATH = "Paket Bencana RR status 02-09-2026.xlsx"
+REQUIRED_SHEETS = ["Daftar RO", "Daftar Paket"]
+
+
+@st.cache_data(show_spinner="Memproses data baru...")
+def load_data(file_source):
+    xls = pd.ExcelFile(file_source)
+    missing = [s for s in REQUIRED_SHEETS if s not in xls.sheet_names]
+    if missing:
+        raise ValueError(
+            f"Sheet {missing} tidak ditemukan. "
+            f"Sheet yang tersedia di file: {xls.sheet_names}"
+        )
+    df_ro = pd.read_excel(xls, sheet_name="Daftar RO")
+    df_paket = pd.read_excel(xls, sheet_name="Daftar Paket")
+    return df_ro, df_paket
+
+
+
+# =========================================================
+# 4. SIDEBAR
+# =========================================================
+
+with st.sidebar:
+    if LOGO_B64:
+        brand_content = f'<img src="data:image/png;base64,{LOGO_B64}" alt="Logo PU">'
+    else:
+        brand_content = '<div class="sidebar-brand-fallback">🏗️ Paket Bencana RR</div>'
+
+    html(f"""
+    <div class="sidebar-brand">{brand_content}</div>
+    <div class="sidebar-filters">
+        <div class="info-box">
+            <b>💡 Filter Dashboard</b><br>
+            Gunakan filter di atas untuk melihat kondisi paket
+            berdasarkan unit organisasi, wilayah, kategori pekerjaan,
+            dan jenis bencana.
+        </div>
+    </div>
+    <div class="sidebar-filters">
+    """)
+
+    html('<div class="filter-title">📤&nbsp; Unggah Data Baru (.xlsx)</div>')
+    uploaded_file = st.file_uploader(
+        "Unggah data",
+        type=["xlsx"],
+        label_visibility="collapsed",
+        help=(
+            "File harus punya sheet 'Daftar RO' dan 'Daftar Paket' "
+            "dengan format kolom yang sama seperti data awal."
+        ),
+    )
+
+    file_source = uploaded_file if uploaded_file is not None else DEFAULT_FILE_PATH
+
+    try:
+        df_ro, df_paket = load_data(file_source)
+        data_ok = True
+    except Exception as e:
+        data_ok = False
+        st.error(f"Gagal memuat data.\n\n**Detail:** {e}")
+
+    if uploaded_file is not None and data_ok:
+        html(f"""
+        <div class="upload-status upload-ok">
+            ✅ <b>{uploaded_file.name}</b> berhasil dimuat &amp; dianalisis
+            <span class="upload-meta">{len(df_paket):,} paket · {len(df_ro):,} baris RO</span>
+        </div>
+        """)
+    elif uploaded_file is None:
+        html("""
+        <div class="upload-status upload-default">
+            📁 Menggunakan data default (belum ada file diunggah)
+        </div>
+        """)
+
+    html("</div>")
+
+    if not data_ok:
+        st.stop()
+
+    html('<div class="sidebar-filters">')
+
+    html('<div class="filter-title">🏢&nbsp; Unit Organisasi</div>')
+    unor_options = ["Semua"] + sorted(
+        df_paket["Unit Organisasi"].dropna().astype(str).unique().tolist()
+    )
+    selected_unor = st.selectbox(
+        "Unit Organisasi", unor_options, label_visibility="collapsed"
+    )
+
+    html('<div class="filter-title">📍&nbsp; Provinsi</div>')
+    prov_options = ["Semua"] + sorted(
+        df_paket["Provinsi"].dropna().astype(str).unique().tolist()
+    )
+    selected_prov = st.selectbox(
+        "Provinsi", prov_options, label_visibility="collapsed"
+    )
+
+    html('<div class="filter-title">🧱&nbsp; Kategori Pekerjaan</div>')
+    kategori_options = ["Semua"] + sorted(
+        df_paket["Kategori"].dropna().astype(str).unique().tolist()
+    )
+    selected_kategori = st.selectbox(
+        "Kategori", kategori_options, label_visibility="collapsed"
+    )
+
+    html('<div class="filter-title">🌪️&nbsp; Jenis Bencana</div>')
+    bencana_options = ["Semua"] + sorted(
+        df_paket["Jenis Bencana"].dropna().astype(str).unique().tolist()
+    )
+    selected_bencana = st.selectbox(
+        "Jenis Bencana", bencana_options, label_visibility="collapsed"
+    )
+
+    html("</div>")
+
+
+# =========================================================
+# 5. FILTER DATA
+# =========================================================
+
+df_filtered = df_paket.copy()
+
+if selected_unor != "Semua":
+    df_filtered = df_filtered[df_filtered["Unit Organisasi"] == selected_unor]
+
+if selected_prov != "Semua":
+    df_filtered = df_filtered[df_filtered["Provinsi"] == selected_prov]
+
+if selected_kategori != "Semua":
+    df_filtered = df_filtered[df_filtered["Kategori"] == selected_kategori]
+
+if selected_bencana != "Semua":
+    df_filtered = df_filtered[df_filtered["Jenis Bencana"] == selected_bencana]
+
+
+# =========================================================
+# 6. HEADER
+# =========================================================
+
+html("""
+<div class="dashboard-header">
+    <div class="header-label">Dashboard Monitoring Infrastruktur</div>
+    <h1>📊 Paket Bencana RR</h1>
+    <p>Monitoring status implementasi, progres fisik, dan realisasi anggaran paket pemulihan bencana.</p>
+</div>
+""")
+
+
+# =========================================================
+# 7. METRICS
+# =========================================================
+
+total_pagu = df_filtered["Pagu (paket) (Rp ribu)"].sum() * 1000
+total_realisasi = df_filtered["Realisasi (paket) (Rp ribu)"].sum() * 1000
+avg_real_keu = (total_realisasi / total_pagu * 100) if total_pagu > 0 else 0
+avg_real_fisik = df_filtered["Real. Fis (%)"].mean() if not df_filtered.empty else 0
+total_paket = len(df_filtered)
+
+
+def rupiah_miliar(value):
+    return f"Rp {value / 1e9:,.2f} M"
+
+
+m1, m2, m3, m4 = st.columns(4)
+
+with m1:
+    html(f"""
+    <div class="metric-card">
+        <div class="metric-top">
+            <div class="metric-title">Total Pagu</div>
+            <div class="metric-icon" style="background:#e8f1fb;">💰</div>
+        </div>
+        <div class="metric-value">{rupiah_miliar(total_pagu)}</div>
+        <div class="metric-sub">Anggaran yang dialokasikan</div>
+    </div>
+    """)
+
+with m2:
+    html(f"""
+    <div class="metric-card">
+        <div class="metric-top">
+            <div class="metric-title">Realisasi Keuangan</div>
+            <div class="metric-icon" style="background:#e8f8f1;">📈</div>
+        </div>
+        <div class="metric-value">{rupiah_miliar(total_realisasi)}</div>
+        <div class="metric-sub" style="color:#10a66a;">▲ {avg_real_keu:.2f}% penyerapan</div>
+    </div>
+    """)
+
+with m3:
+    html(f"""
+    <div class="metric-card">
+        <div class="metric-top">
+            <div class="metric-title">Progress Fisik</div>
+            <div class="metric-icon" style="background:#fff5df;">🏗️</div>
+        </div>
+        <div class="metric-value">{avg_real_fisik:.2f}%</div>
+        <div class="metric-sub">Rata-rata kemajuan pekerjaan</div>
+    </div>
+    """)
+
+with m4:
+    html(f"""
+    <div class="metric-card">
+        <div class="metric-top">
+            <div class="metric-title">Total Paket</div>
+            <div class="metric-icon" style="background:#eeeefe;">📦</div>
+        </div>
+        <div class="metric-value">{total_paket:,}</div>
+        <div class="metric-sub">Paket terdaftar</div>
+    </div>
+    """)
+
+
+# =========================================================
+# 8. CHART SECTION
+# =========================================================
+
+html('<div class="section-title">📊 Analisis Anggaran & Pekerjaan</div>')
+
+col_left, col_right = st.columns([6, 4])
+
+# --- BAR CHART ---
+with col_left:
+    html('<div class="content-card"><b>Realisasi vs Pagu per Unit Organisasi</b>')
+
+    df_unor_agg = (
+        df_filtered
+        .groupby("Unit Organisasi")[
+            ["Pagu (paket) (Rp ribu)", "Realisasi (paket) (Rp ribu)"]
+        ]
+        .sum()
+        .reset_index()
+    )
+    df_unor_agg["Pagu (Miliar)"] = df_unor_agg["Pagu (paket) (Rp ribu)"] / 1_000_000
+    df_unor_agg["Realisasi (Miliar)"] = df_unor_agg["Realisasi (paket) (Rp ribu)"] / 1_000_000
+
+    fig_bar = px.bar(
+        df_unor_agg,
+        x="Unit Organisasi",
+        y=["Pagu (Miliar)", "Realisasi (Miliar)"],
+        barmode="group",
+        labels={"value": "Nilai (Miliar Rp)", "variable": ""},
+        text_auto=".2f",
+        color_discrete_sequence=["#124d7c", "#f5b700"],
+    )
+    fig_bar.update_traces(textposition="outside", textfont_size=10)
+    fig_bar.update_layout(
+        height=400,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=10, r=10, t=30, b=20),
+        font=dict(family="Inter", size=11, color="#475569"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        hovermode="x unified",
+    )
+    fig_bar.update_xaxes(showgrid=False, title=None)
+    fig_bar.update_yaxes(showgrid=True, gridcolor="#edf1f5", title=None)
+
+    st.plotly_chart(fig_bar, use_container_width=True, config={"displayModeBar": False})
+    html("</div>")
+
+# --- PIE CHART ---
+with col_right:
+    html('<div class="content-card"><b>Distribusi Kategori Pekerjaan</b>')
+
+    fig_pie = px.pie(
+        df_filtered,
+        names="Kategori",
+        hole=0.58,
+        color_discrete_sequence=px.colors.sequential.Blues_r,
+    )
+    fig_pie.update_traces(
+        textposition="inside",
+        textinfo="percent",
+        hovertemplate="<b>%{label}</b><br>%{percent}<extra></extra>",
+    )
+    fig_pie.update_layout(
+        height=400,
+        paper_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=10, r=10, t=30, b=10),
+        font=dict(family="Inter", size=11),
+        legend=dict(orientation="h", yanchor="top", y=-0.02, xanchor="center", x=0.5),
+    )
+
+    st.plotly_chart(fig_pie, use_container_width=True, config={"displayModeBar": False})
+    html("</div>")
+
+
+# =========================================================
+# 9. PROGRESS SUMMARY
+# =========================================================
+
+html('<div class="section-title">📌 Ringkasan Progress</div>')
+
+progress_col1, progress_col2 = st.columns(2)
+
+with progress_col1:
+    html('<div class="content-card"><b>Penyerapan Keuangan</b>')
+    st.progress(min(max(avg_real_keu / 100, 0), 1))
+    html(f"""
+    <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:0.8rem;color:#64748b;">
+        <span>Realisasi</span><b>{avg_real_keu:.2f}%</b>
+    </div>
+    </div>
+    """)
+
+with progress_col2:
+    html('<div class="content-card"><b>Progress Fisik</b>')
+    st.progress(min(max(avg_real_fisik / 100, 0), 1))
+    html(f"""
+    <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:0.8rem;color:#64748b;">
+        <span>Kemajuan pekerjaan</span><b>{avg_real_fisik:.2f}%</b>
+    </div>
+    </div>
+    """)
+
+
+# =========================================================
+# 10. MAP
+# =========================================================
+
+html('<div class="section-title">🗺️ Sebaran Lokasi Paket</div>')
+
+df_map = df_filtered.dropna(subset=["Latitude", "Longitude"])
+
+if not df_map.empty:
+    center_lat = df_map["Latitude"].mean()
+    center_lon = df_map["Longitude"].mean()
+
+    m = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=6,
+        tiles="CartoDB positron",
+        control_scale=True,
+    )
+
+    for _, row in df_map.iterrows():
+        progress = row["Real. Fis (%)"]
+        if pd.isna(progress):
+            progress = 0
+
+        if progress < 30:
+            marker_color, status_text = "red", "Progress Rendah"
+        elif progress < 70:
+            marker_color, status_text = "orange", "Dalam Proses"
+        else:
+            marker_color, status_text = "green", "Progress Baik"
+
+        popup_html = f"""
+        <div style="font-family:Arial;min-width:260px;padding:5px;">
+            <div style="font-size:14px;font-weight:bold;color:#123;margin-bottom:8px;">
+                {row['Nama Paket']}
+            </div>
+            <hr style="border:0;border-top:1px solid #ddd;">
+            <div style="margin:6px 0;"><b>Provinsi</b><br>{row['Provinsi']}</div>
+            <div style="margin:6px 0;"><b>Unit Organisasi</b><br>{row['Unit Organisasi']}</div>
+            <div style="margin:6px 0;"><b>Pagu</b><br>Rp {row['Pagu (paket) (Rp ribu)'] * 1000:,.0f}</div>
+            <div style="margin:6px 0;">
+                <b>Progress Fisik</b><br>
+                <span style="color:{marker_color};font-weight:bold;font-size:15px;">{progress:.2f}%</span>
+                &nbsp;— {status_text}
+            </div>
+        </div>
+        """
+
+        folium.CircleMarker(
+            location=[row["Latitude"], row["Longitude"]],
+            radius=7,
+            popup=folium.Popup(popup_html, max_width=330),
+            tooltip=f"{row['Nama Paket']} — {progress:.1f}%",
+            color=marker_color,
+            weight=2,
+            fill=True,
+            fill_color=marker_color,
+            fill_opacity=0.75,
+        ).add_to(m)
+
+    html('<div class="content-card">')
+    st_folium(m, width=None, height=520, returned_objects=[])
+    html("</div>")
+
+else:
+    st.info("Tidak ada koordinat lokasi yang tersedia untuk pilihan filter saat ini.")
+
+
+# =========================================================
+# 11. TOP 10
+# =========================================================
+
+html('<div class="section-title">🏆 Top 10 Paket Berdasarkan Nilai Pagu</div>')
+
+top10_paket = (
+    df_filtered
+    .nlargest(10, "Pagu (paket) (Rp ribu)")
+    [["Nama Paket", "Unit Organisasi", "Provinsi", "Pagu (paket) (Rp ribu)", "Real. Fis (%)"]]
+    .copy()
+)
+top10_paket["Pagu (Rp)"] = top10_paket["Pagu (paket) (Rp ribu)"] * 1000
+
+top10_display = top10_paket[
+    ["Nama Paket", "Unit Organisasi", "Provinsi", "Pagu (Rp)", "Real. Fis (%)"]
+].copy()
+
+st.dataframe(
+    top10_display.style.format({"Pagu (Rp)": "Rp {:,.0f}", "Real. Fis (%)": "{:.2f}%"}),
+    use_container_width=True,
+    hide_index=True,
+)
+
+
+# =========================================================
+# 12. DETAIL DATA
+# =========================================================
+
+html('<div class="section-title">📋 Detail Data</div>')
+
+tab1, tab2 = st.tabs(["📦 Daftar Paket", "📑 Rincian Output (RO)"])
+
+with tab1:
+    st.dataframe(df_filtered, use_container_width=True, hide_index=True)
+
+with tab2:
+    st.dataframe(df_ro, use_container_width=True, hide_index=True)
+
+
+# =========================================================
+# 13. FOOTER
+# =========================================================
+
+html("""
+<div class="dashboard-footer">
+    Dashboard Monitoring Paket Bencana RR<br>
+    Data diperbarui berdasarkan file status 02 September 2026
+</div>
+""")
