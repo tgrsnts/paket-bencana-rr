@@ -947,15 +947,15 @@ with col_left:
         .sum()
         .reset_index()
     )
-    df_unor_agg["Pagu (Miliar)"] = df_unor_agg["Pagu (paket) (Rp ribu)"] / 1_000_000
-    df_unor_agg["Realisasi (Miliar)"] = df_unor_agg["Realisasi (paket) (Rp ribu)"] / 1_000_000
+    df_unor_agg["Pagu (Juta)"] = df_unor_agg["Pagu (paket) (Rp ribu)"] / 1_000_000
+    df_unor_agg["Realisasi (Juta)"] = df_unor_agg["Realisasi (paket) (Rp ribu)"] / 1_000_000
 
     fig_bar = px.bar(
         df_unor_agg,
         x="Unit Organisasi",
-        y=["Pagu (Miliar)", "Realisasi (Miliar)"],
+        y=["Pagu (Juta)", "Realisasi (Juta)"],
         barmode="group",
-        labels={"value": "Nilai (Miliar Rp)", "variable": ""},
+        labels={"value": "Nilai (Juta Rp)", "variable": ""},
         text_auto=".2f",
         color_discrete_sequence=["#124d7c", "#f5b700"],
     )
