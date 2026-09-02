@@ -1294,7 +1294,7 @@ st.dataframe(
 
 
 # =========================================================
-# ANALISIS & PENGELOMPOKAN KATEGORI (GROUP BY PROVINSI & SATUAN)
+# ANALISIS & PENGELOMPOKAN KATEGORI (GROUP BY UNOR, PROVINSI, KATEGORI & SATUAN)
 # =========================================================
 
 html('<div class="section-title">🏷️ Analisis & Pengelompokan Kategori Paket</div>')
@@ -1309,20 +1309,20 @@ if vol_col and satuan_col:
 
 html("""
 <div style="font-size:0.95rem; font-weight:800; color:#1F4E78; margin-bottom:4px;">
-    Rekapitulasi Paket & Volume Output Berdasarkan Provinsi & Kategori
+    Rekapitulasi Paket & Volume Output Berdasarkan Unit Organisasi, Provinsi & Kategori
 </div>
 <div style="font-size:0.75rem; color:#64748b; margin-bottom:14px;">
-    Tabel dikelompokkan berdasarkan <b>Provinsi</b>, <b>Jenis Kegiatan (Kategori)</b>, dan dipecah terpisah per <b>Satuan Volume</b>.
+    Tabel dikelompokkan berdasarkan <b>Unit Organisasi</b>, <b>Provinsi</b>, <b>Jenis Kegiatan (Kategori)</b>, dan dipecah terpisah per <b>Satuan Volume</b>.
 </div>
 """)
 
-# Group By dengan Provinsi di Paling Depan
-custom_group = ["Provinsi", "Kategori", "Unit Organisasi"]
+# Group By dengan Unit Organisasi & Provinsi di Paling Depan
+custom_group = ["Unit Organisasi", "Provinsi", "Kategori"]
 if satuan_col:
     custom_group.append(satuan_col)
 
 if vol_col and satuan_col:
-    df_grouped_prov = df_filtered_kat.groupby(custom_group).agg(
+    df_grouped_unor = df_filtered_kat.groupby(custom_group).agg(
         **{
             "Total Volume": (vol_col, "sum"),
             "Jumlah Paket": ("Nama Paket", "count"),
@@ -1330,26 +1330,29 @@ if vol_col and satuan_col:
         }
     ).reset_index()
     
-    df_grouped_prov["Volume Output"] = df_grouped_prov.apply(
+    df_grouped_unor["Volume Output"] = df_grouped_unor.apply(
         lambda r: f"{r['Total Volume']:,.2f} {r[satuan_col]}".rstrip('0').rstrip('.'), axis=1
     )
     
-    df_display_prov = df_grouped_prov[
-        ["Provinsi", "Kategori", "Volume Output", "Unit Organisasi", "Jumlah Paket", "Total Pagu (Rp ribu)"]
+    df_display_unor = df_grouped_unor[
+        ["Unit Organisasi", "Provinsi", "Kategori", "Volume Output", "Jumlah Paket", "Total Pagu (Rp ribu)"]
     ].rename(columns={"Kategori": "Jenis Kegiatan"})
 else:
-    df_grouped_prov = df_filtered_kat.groupby(["Provinsi", "Kategori", "Unit Organisasi"]).agg(
+    df_grouped_unor = df_filtered_kat.groupby(["Unit Organisasi", "Provinsi", "Kategori"]).agg(
         **{
             "Jumlah Paket": ("Nama Paket", "count"),
             "Total Pagu (Rp ribu)": ("Pagu (paket) (Rp ribu)", "sum")
         }
     ).reset_index()
-    df_display_prov = df_grouped_prov.rename(columns={"Kategori": "Jenis Kegiatan"})
+    df_display_unor = df_grouped_unor.rename(columns={"Kategori": "Jenis Kegiatan"})
 
-df_display_prov = df_display_prov.sort_values(["Provinsi", "Jenis Kegiatan"], ascending=[True, True]).reset_index(drop=True)
+df_display_unor = df_display_unor.sort_values(
+    ["Unit Organisasi", "Provinsi", "Jenis Kegiatan"], 
+    ascending=[True, True, True]
+).reset_index(drop=True)
 
 st.dataframe(
-    df_display_prov.style.format({"Total Pagu (Rp ribu)": "Rp {:,.0f}"}),
+    df_display_unor.style.format({"Total Pagu (Rp ribu)": "Rp {:,.0f}"}),
     use_container_width=True,
     hide_index=True
 )
