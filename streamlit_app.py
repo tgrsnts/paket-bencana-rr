@@ -131,7 +131,7 @@ def auto_categorize(nama_paket):
 
 
 # =========================================================
-# MAPPING CLUSTER (6 KELOMPOK BESAR UNTUK DONUT CHART)
+# MAPPING CLUSTER (6 KELOMPOK BESAR UNTUK DONUT CHART & INFOGRAFIS)
 # =========================================================
 
 CLUSTER_MAP = {
@@ -329,7 +329,6 @@ def render_rincian_item(df_items: pd.DataFrame, level_label: str, level_name: st
         key=f"df_{sort_key}",
     )
     html('<div style="height:14px;"></div>')
-
 
     fig_combo = make_subplots(specs=[[{"secondary_y": True}]])
 
@@ -640,6 +639,57 @@ section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button {
     height: 22px;
     border-radius: 8px;
     background: #f5b700;
+}
+
+/* INFOGRAPHICS / CARD INFOGRAM STYLES */
+.info-card-container {
+    background: #ffffff;
+    border-radius: 14px;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    height: 100%;
+}
+.info-card-header {
+    padding: 12px 16px;
+    color: #ffffff;
+    font-size: 0.95rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.info-card-body {
+    padding: 14px 16px;
+    background: #ffffff;
+}
+.info-item-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 0.82rem;
+    color: #1e293b;
+}
+.info-item-row:last-child {
+    margin-bottom: 0;
+}
+.info-item-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: #f1f5f9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+.info-item-val {
+    font-weight: 800;
+    color: #0f172a;
 }
 
 /* METRIC CARD */
@@ -1099,6 +1149,278 @@ with progress_col2:
 
 
 # =========================================================
+# INFOGRAFIS TAMPILAN REKAPITULASI PENANGANAN BENCANA (INFOGRAPHIC CARDS)
+# =========================================================
+
+html('<div class="section-title">📋 Ringkasan Output Infrastruktur Penanganan Bencana</div>')
+
+# Helper function kalkulasi agregasi per kategori dari dataframe terfilter
+vol_col_info = find_col_by_keywords(df_filtered, ["vol", "volume", "panjang", "jumlah"])
+satuan_col_info = find_col_by_keywords(df_filtered, ["satuan", "unit"])
+
+def get_cat_summary(kategori_name):
+    df_sub = df_filtered[df_filtered["Kategori"] == kategori_name]
+    paket_cnt = len(df_sub)
+    if vol_col_info and vol_col_info in df_sub.columns:
+        vol_sum = pd.to_numeric(df_sub[vol_col_info], errors='coerce').fillna(0).sum()
+        satuan = df_sub[satuan_col_info].dropna().iloc[0] if (satuan_col_info and not df_sub[satuan_col_info].dropna().empty) else "Unit"
+        return f"{vol_sum:,.0f} {satuan}".strip()
+    return f"{paket_cnt} Paket"
+
+info_col1, info_col2 = st.columns(2)
+
+with info_col1:
+    # 1. AIR BAKU & AIR BERSIH
+    html(f"""
+    <div class="info-card-container" style="margin-bottom: 20px;">
+        <div class="info-card-header" style="background: linear-gradient(90deg, #22b8c8, #0ea5e9);">
+            💧 Air Baku &amp; Air Bersih
+        </div>
+        <div class="info-card-body">
+            <div class="info-item-row">
+                <div class="info-item-icon">🚰</div>
+                <div><b>SPAM:</b> <span class="info-item-val">{get_cat_summary('Rehabilitasi SPAM')}</span></div>
+            </div>
+            <div class="info-item-row">
+                <div class="info-item-icon">🏞️</div>
+                <div><b>Air Baku:</b> <span class="info-item-val">{get_cat_summary('Air Baku (Sumur air tanah)')}</span></div>
+            </div>
+            <div class="info-item-row">
+                <div class="info-item-icon">🕳️</div>
+                <div><b>Sumur Bor:</b> <span class="info-item-val">{get_cat_summary('Sumur Bor')}</span></div>
+            </div>
+        </div>
+    </div>
+    """)
+
+    # 2. KONEKTIVITAS
+    html(f"""
+    <div class="info-card-container" style="margin-bottom: 20px;">
+        <div class="info-card-header" style="background: linear-gradient(90deg, #e5383b, #ef4444);">
+            🛣️ Konektivitas
+        </div>
+        <div class="info-card-body">
+            <div class="info-item-row">
+                <div class="info-item-icon">🛣️</div>
+                <div><b>Jalan:</b> <span class="info-item-val">{get_cat_summary('Pembangunan/Rehabilitasi Jalan')}</span></div>
+            </div>
+            <div class="info-item-row">
+                <div class="info-item-icon">🌉</div>
+                <div><b>Jembatan:</b> <span class="info-item-val">{get_cat_summary('Pembangunan/Rehabilitasi Jembatan')}</span></div>
+            </div>
+        </div>
+    </div>
+    """)
+
+    # 3. SANITASI & PERSAMPAHAN
+    html(f"""
+    <div class="info-card-container">
+        <div class="info-card-header" style="background: linear-gradient(90deg, #f2b705, #eab308);">
+            🗑️ Sanitasi &amp; Persampahan
+        </div>
+        <div class="info-card-body">
+            <div class="info-item-row">
+                <div class="info-item-icon">🚛</div>
+                <div><b>TPA:</b> <span class="info-item-val">{get_cat_summary('Rehabilitasi TPA')}</span></div>
+            </div>
+            <div class="info-item-row">
+                <div class="info-item-icon">🚽</div>
+                <div><b>IPLT:</b> <span class="info-item-val">{get_cat_summary('Rehabilitasi IPLT')}</span></div>
+            </div>
+        </div>
+    </div>
+    """)
+
+with info_col2:
+    # 4. IRIGASI, RAWA, & SUNGAI
+    html(f"""
+    <div class="info-card-container" style="margin-bottom: 20px;">
+        <div class="info-card-header" style="background: linear-gradient(90deg, #1e40af, #2563eb);">
+            🌾 Irigasi, Rawa, &amp; Sungai
+        </div>
+        <div class="info-card-body">
+            <div class="info-item-row">
+                <div class="info-item-icon">🌊</div>
+                <div><b>Pengendalian Banjir &amp; Sungai:</b> <span class="info-item-val">{get_cat_summary('Pengendalian Banjir dan Normalisasi Sungai')}</span></div>
+            </div>
+            <div class="info-item-row">
+                <div class="info-item-icon">🧱</div>
+                <div><b>Cekdam:</b> <span class="info-item-val">{get_cat_summary('Pembangunan Cekdam')}</span></div>
+            </div>
+            <div class="info-item-row">
+                <div class="info-item-icon">🌾</div>
+                <div><b>Irigasi:</b> <span class="info-item-val">{get_cat_summary('Rehabilitasi Jaringan Irigasi')}</span></div>
+            </div>
+        </div>
+    </div>
+    """)
+
+    # 5. RUMAH HUNIAN & FASILITAS UMUM
+    html(f"""
+    <div class="info-card-container">
+        <div class="info-card-header" style="background: linear-gradient(90deg, #b8860b, #d97706);">
+            🏠 Rumah Hunian &amp; Fasilitas Umum
+        </div>
+        <div class="info-card-body">
+            <div class="info-item-row">
+                <div class="info-item-icon">🏕️</div>
+                <div><b>Huntara:</b> <span class="info-item-val">{get_cat_summary('Pembangunan Huntara')}</span></div>
+            </div>
+            <div class="info-item-row">
+                <div class="info-item-icon">🏥</div>
+                <div><b>Kesehatan:</b> <span class="info-item-val">{get_cat_summary('Rehabilitasi Sarpras Kesehatan')}</span></div>
+            </div>
+            <div class="info-item-row">
+                <div class="info-item-icon">🕌</div>
+                <div><b>Peribadatan:</b> <span class="info-item-val">{get_cat_summary('Rehabilitasi Sarpras Peribadatan')}</span></div>
+            </div>
+            <div class="info-item-row">
+                <div class="info-item-icon">🏫</div>
+                <div><b>Ponpes &amp; Madrasah:</b> <span class="info-item-val">{get_cat_summary('Rehabilitasi Sarpras Ponpes')} / {get_cat_summary('Rehabilitasi Sarpras Madrasah')}</span></div>
+            </div>
+        </div>
+    </div>
+    """)
+
+
+# =========================================================
+# ANALISIS & PENGELOMPOKAN KATEGORI (GROUP BY UNOR, PROVINSI, KATEGORI & SATUAN)
+# =========================================================
+
+html('<div class="section-title">🏷️ Analisis & Pengelompokan Kategori Paket</div>')
+category_card = st.container(border=True)
+
+vol_col = find_col_by_keywords(df_filtered, ["vol", "volume", "panjang", "jumlah"])
+satuan_col = find_col_by_keywords(df_filtered, ["satuan", "unit"])
+
+df_filtered_kat = df_filtered.copy()
+if vol_col and satuan_col:
+    df_filtered_kat[vol_col] = pd.to_numeric(df_filtered_kat[vol_col], errors='coerce').fillna(0)
+
+category_card.markdown("""
+<div style="font-size:0.95rem; font-weight:800; color:#1F4E78; margin-bottom:4px;">
+    Rekapitulasi Paket & Volume Output Berdasarkan Unit Organisasi, Provinsi & Kategori
+</div>
+<div style="font-size:0.75rem; color:#64748b; margin-bottom:14px;">
+    Tabel dikelompokkan berdasarkan <b>Unit Organisasi</b>, <b>Provinsi</b>, <b>Jenis Kegiatan (Kategori)</b>, dan dipecah terpisah per <b>Satuan Volume</b>.
+</div>
+""", unsafe_allow_html=True)
+
+# Group By dengan Unit Organisasi & Provinsi di Paling Depan
+custom_group = ["Unit Organisasi", "Provinsi", "Kategori"]
+if satuan_col:
+    custom_group.append(satuan_col)
+
+if vol_col and satuan_col:
+    df_grouped_unor = df_filtered_kat.groupby(custom_group).agg(
+        **{
+            "Total Volume": (vol_col, "sum"),
+            "Jumlah Paket": ("Nama Paket", "count"),
+            "Total Pagu (Rp ribu)": ("Pagu (paket) (Rp ribu)", "sum")
+        }
+    ).reset_index()
+    
+    df_grouped_unor["Volume Output"] = df_grouped_unor.apply(
+        lambda r: f"{r['Total Volume']:,.2f} {r[satuan_col]}".rstrip('0').rstrip('.'), axis=1
+    )
+    
+    df_display_unor = df_grouped_unor[
+        ["Unit Organisasi", "Provinsi", "Kategori", "Volume Output", "Jumlah Paket", "Total Pagu (Rp ribu)"]
+    ].rename(columns={"Kategori": "Jenis Kegiatan"})
+else:
+    df_grouped_unor = df_filtered_kat.groupby(["Unit Organisasi", "Provinsi", "Kategori"]).agg(
+        **{
+            "Jumlah Paket": ("Nama Paket", "count"),
+            "Total Pagu (Rp ribu)": ("Pagu (paket) (Rp ribu)", "sum")
+        }
+    ).reset_index()
+    df_display_unor = df_grouped_unor.rename(columns={"Kategori": "Jenis Kegiatan"})
+
+df_display_unor = df_display_unor.sort_values(
+    ["Unit Organisasi", "Provinsi", "Jenis Kegiatan"], 
+    ascending=[True, True, True]
+).reset_index(drop=True)
+
+df_display_unor["_unor_abbr"] = df_display_unor["Unit Organisasi"].apply(abbreviate_unor)
+
+UNOR_ORDER = ["BM", "CK", "SDA", "PS"]
+UNOR_ICON = {"BM": "🛣️", "CK": "🏘️", "SDA": "💧", "PS": "🏗️"}
+
+other_abbrs_kat = sorted(
+    a for a in df_display_unor["_unor_abbr"].dropna().unique() if a not in UNOR_ORDER
+)
+
+kat_unor_tab_labels = [
+    f"{UNOR_ICON.get(a, '📦')} {UNOR_FULLNAME.get(a, a)} ({a})" for a in UNOR_ORDER
+]
+kat_unor_tabs = category_card.tabs(kat_unor_tab_labels)
+
+for tab, abbr in zip(kat_unor_tabs, UNOR_ORDER):
+    with tab:
+        df_kat_unor_sub = df_display_unor[df_display_unor["_unor_abbr"] == abbr].drop(columns=["_unor_abbr", "Unit Organisasi"])
+
+        if df_kat_unor_sub.empty:
+            st.info(f"Tidak ada data untuk unit organisasi {UNOR_FULLNAME.get(abbr, abbr)} pada filter saat ini.")
+        else:
+            st.dataframe(
+                df_kat_unor_sub.style.format({"Total Pagu (Rp ribu)": "Rp {:,.0f}"}),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+if other_abbrs_kat:
+    with category_card.expander(f"📦 Unit organisasi lainnya di luar BM/CK/SDA/PS ({', '.join(other_abbrs_kat)})"):
+        other_kat_tabs = st.tabs(other_abbrs_kat)
+        for tab, abbr in zip(other_kat_tabs, other_abbrs_kat):
+            with tab:
+                df_kat_unor_sub = df_display_unor[df_display_unor["_unor_abbr"] == abbr].drop(columns=["_unor_abbr", "Unit Organisasi"])
+                st.dataframe(
+                    df_kat_unor_sub.style.format({"Total Pagu (Rp ribu)": "Rp {:,.0f}"}),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+category_card.markdown('<div style="height:20px;"></div>', unsafe_allow_html=True)
+
+kat_list = sorted(df_filtered_kat["Kategori"].dropna().unique().tolist())
+if kat_list:
+    selected_view_kat = category_card.selectbox(
+        "🔎 Pilih Kategori Pekerjaan untuk melihat rincian paket dan volumenya:",
+        kat_list
+    )
+    
+    show_cols = ["Nama Paket", "Unit Organisasi", "Provinsi"]
+    if vol_col:
+        show_cols.append(vol_col)
+    if satuan_col:
+        show_cols.append(satuan_col)
+    show_cols.extend(["Pagu (paket) (Rp ribu)", "Realisasi (paket) (Rp ribu)", "Real. Fis (%)"])
+    
+    df_kat_detail = df_filtered_kat[df_filtered_kat["Kategori"] == selected_view_kat][
+        [c for c in show_cols if c in df_filtered_kat.columns]
+    ].copy()
+    
+    df_kat_detail = df_kat_detail.rename(columns={
+        "Pagu (paket) (Rp ribu)": "Pagu (Rp ribu)",
+        "Realisasi (paket) (Rp ribu)": "Realisasi (Rp ribu)"
+    })
+    
+    detail_fmt = {
+        "Pagu (Rp ribu)": "{:,.0f}",
+        "Realisasi (Rp ribu)": "{:,.0f}",
+        "Real. Fis (%)": "{:.2f}%",
+    }
+    if vol_col and vol_col in df_kat_detail.columns:
+        detail_fmt[vol_col] = "{:,.2f}"
+        
+    category_card.dataframe(
+        df_kat_detail.style.format(detail_fmt),
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+# =========================================================
 # RINGKASAN REALISASI PER PROVINSI
 # =========================================================
 
@@ -1327,9 +1649,6 @@ else:
 
 html('<div class="section-title">🏆 Top 10 Paket Berdasarkan Realisasi per Unit Organisasi</div>')
 
-UNOR_ORDER = ["BM", "CK", "SDA", "PS"]
-UNOR_ICON = {"BM": "🛣️", "CK": "🏘️", "SDA": "💧", "PS": "🏗️"}
-
 df_filtered_top = df_filtered.copy()
 df_filtered_top["_unor_abbr"] = df_filtered_top["Unit Organisasi"].apply(abbreviate_unor)
 
@@ -1399,138 +1718,6 @@ if other_abbrs:
                     hide_index=True,
                 )
 
-# =========================================================
-# ANALISIS & PENGELOMPOKAN KATEGORI (GROUP BY UNOR, PROVINSI, KATEGORI & SATUAN)
-# =========================================================
-
-html('<div class="section-title">🏷️ Analisis & Pengelompokan Kategori Paket</div>')
-category_card = st.container(border=True)
-
-vol_col = find_col_by_keywords(df_filtered, ["vol", "volume", "panjang", "jumlah"])
-satuan_col = find_col_by_keywords(df_filtered, ["satuan", "unit"])
-
-df_filtered_kat = df_filtered.copy()
-if vol_col and satuan_col:
-    df_filtered_kat[vol_col] = pd.to_numeric(df_filtered_kat[vol_col], errors='coerce').fillna(0)
-
-category_card.markdown("""
-<div style="font-size:0.95rem; font-weight:800; color:#1F4E78; margin-bottom:4px;">
-    Rekapitulasi Paket & Volume Output Berdasarkan Unit Organisasi, Provinsi & Kategori
-</div>
-<div style="font-size:0.75rem; color:#64748b; margin-bottom:14px;">
-    Tabel dikelompokkan berdasarkan <b>Unit Organisasi</b>, <b>Provinsi</b>, <b>Jenis Kegiatan (Kategori)</b>, dan dipecah terpisah per <b>Satuan Volume</b>.
-</div>
-""", unsafe_allow_html=True)
-
-# Group By dengan Unit Organisasi & Provinsi di Paling Depan
-custom_group = ["Unit Organisasi", "Provinsi", "Kategori"]
-if satuan_col:
-    custom_group.append(satuan_col)
-
-if vol_col and satuan_col:
-    df_grouped_unor = df_filtered_kat.groupby(custom_group).agg(
-        **{
-            "Total Volume": (vol_col, "sum"),
-            "Jumlah Paket": ("Nama Paket", "count"),
-            "Total Pagu (Rp ribu)": ("Pagu (paket) (Rp ribu)", "sum")
-        }
-    ).reset_index()
-    
-    df_grouped_unor["Volume Output"] = df_grouped_unor.apply(
-        lambda r: f"{r['Total Volume']:,.2f} {r[satuan_col]}".rstrip('0').rstrip('.'), axis=1
-    )
-    
-    df_display_unor = df_grouped_unor[
-        ["Unit Organisasi", "Provinsi", "Kategori", "Volume Output", "Jumlah Paket", "Total Pagu (Rp ribu)"]
-    ].rename(columns={"Kategori": "Jenis Kegiatan"})
-else:
-    df_grouped_unor = df_filtered_kat.groupby(["Unit Organisasi", "Provinsi", "Kategori"]).agg(
-        **{
-            "Jumlah Paket": ("Nama Paket", "count"),
-            "Total Pagu (Rp ribu)": ("Pagu (paket) (Rp ribu)", "sum")
-        }
-    ).reset_index()
-    df_display_unor = df_grouped_unor.rename(columns={"Kategori": "Jenis Kegiatan"})
-
-df_display_unor = df_display_unor.sort_values(
-    ["Unit Organisasi", "Provinsi", "Jenis Kegiatan"], 
-    ascending=[True, True, True]
-).reset_index(drop=True)
-
-df_display_unor["_unor_abbr"] = df_display_unor["Unit Organisasi"].apply(abbreviate_unor)
-
-other_abbrs_kat = sorted(
-    a for a in df_display_unor["_unor_abbr"].dropna().unique() if a not in UNOR_ORDER
-)
-
-kat_unor_tab_labels = [
-    f"{UNOR_ICON.get(a, '📦')} {UNOR_FULLNAME.get(a, a)} ({a})" for a in UNOR_ORDER
-]
-kat_unor_tabs = category_card.tabs(kat_unor_tab_labels)
-
-for tab, abbr in zip(kat_unor_tabs, UNOR_ORDER):
-    with tab:
-        df_kat_unor_sub = df_display_unor[df_display_unor["_unor_abbr"] == abbr].drop(columns=["_unor_abbr", "Unit Organisasi"])
-
-        if df_kat_unor_sub.empty:
-            st.info(f"Tidak ada data untuk unit organisasi {UNOR_FULLNAME.get(abbr, abbr)} pada filter saat ini.")
-        else:
-            st.dataframe(
-                df_kat_unor_sub.style.format({"Total Pagu (Rp ribu)": "Rp {:,.0f}"}),
-                use_container_width=True,
-                hide_index=True,
-            )
-
-if other_abbrs_kat:
-    with category_card.expander(f"📦 Unit organisasi lainnya di luar BM/CK/SDA/PS ({', '.join(other_abbrs_kat)})"):
-        other_kat_tabs = st.tabs(other_abbrs_kat)
-        for tab, abbr in zip(other_kat_tabs, other_abbrs_kat):
-            with tab:
-                df_kat_unor_sub = df_display_unor[df_display_unor["_unor_abbr"] == abbr].drop(columns=["_unor_abbr", "Unit Organisasi"])
-                st.dataframe(
-                    df_kat_unor_sub.style.format({"Total Pagu (Rp ribu)": "Rp {:,.0f}"}),
-                    use_container_width=True,
-                    hide_index=True,
-                )
-
-category_card.markdown('<div style="height:20px;"></div>', unsafe_allow_html=True)
-
-kat_list = sorted(df_filtered_kat["Kategori"].dropna().unique().tolist())
-if kat_list:
-    selected_view_kat = category_card.selectbox(
-        "🔎 Pilih Kategori Pekerjaan untuk melihat rincian paket dan volumenya:",
-        kat_list
-    )
-    
-    show_cols = ["Nama Paket", "Unit Organisasi", "Provinsi"]
-    if vol_col:
-        show_cols.append(vol_col)
-    if satuan_col:
-        show_cols.append(satuan_col)
-    show_cols.extend(["Pagu (paket) (Rp ribu)", "Realisasi (paket) (Rp ribu)", "Real. Fis (%)"])
-    
-    df_kat_detail = df_filtered_kat[df_filtered_kat["Kategori"] == selected_view_kat][
-        [c for c in show_cols if c in df_filtered_kat.columns]
-    ].copy()
-    
-    df_kat_detail = df_kat_detail.rename(columns={
-        "Pagu (paket) (Rp ribu)": "Pagu (Rp ribu)",
-        "Realisasi (paket) (Rp ribu)": "Realisasi (Rp ribu)"
-    })
-    
-    detail_fmt = {
-        "Pagu (Rp ribu)": "{:,.0f}",
-        "Realisasi (Rp ribu)": "{:,.0f}",
-        "Real. Fis (%)": "{:.2f}%",
-    }
-    if vol_col and vol_col in df_kat_detail.columns:
-        detail_fmt[vol_col] = "{:,.2f}"
-        
-    category_card.dataframe(
-        df_kat_detail.style.format(detail_fmt),
-        use_container_width=True,
-        hide_index=True
-    )
 
 # =========================================================
 # DETAIL DATA
