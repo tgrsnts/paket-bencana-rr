@@ -992,81 +992,81 @@ html('<div class="section-title">📊 Analisis Anggaran & Pekerjaan</div>')
 col_left, col_right = st.columns([6, 4])
 
 with col_left:
-    html('<div class="content-card"><b>Realisasi vs Pagu per Unit Organisasi</b>')
+    with st.container(border=True):
+        html('<b>Realisasi vs Pagu per Unit Organisasi</b>')
 
-    df_unor_agg = (
-        df_filtered
-        .groupby("Unit Organisasi")[
-            ["Pagu (paket) (Rp ribu)", "Realisasi (paket) (Rp ribu)"]
-        ]
-        .sum()
-        .reset_index()
-    )
-    df_unor_agg["Unor Singkat"] = df_unor_agg["Unit Organisasi"].apply(abbreviate_unor)
-    df_unor_agg["Pagu (Juta)"] = df_unor_agg["Pagu (paket) (Rp ribu)"] / 1_000_000
-    df_unor_agg["Realisasi (Juta)"] = df_unor_agg["Realisasi (paket) (Rp ribu)"] / 1_000_000
+        df_unor_agg = (
+            df_filtered
+            .groupby("Unit Organisasi")[
+                ["Pagu (paket) (Rp ribu)", "Realisasi (paket) (Rp ribu)"]
+            ]
+            .sum()
+            .reset_index()
+        )
+        df_unor_agg["Unor Singkat"] = df_unor_agg["Unit Organisasi"].apply(abbreviate_unor)
+        df_unor_agg["Pagu (Juta)"] = df_unor_agg["Pagu (paket) (Rp ribu)"] / 1_000_000
+        df_unor_agg["Realisasi (Juta)"] = df_unor_agg["Realisasi (paket) (Rp ribu)"] / 1_000_000
 
-    fig_bar = px.bar(
-        df_unor_agg,
-        x="Unor Singkat",
-        y=["Pagu (Juta)", "Realisasi (Juta)"],
-        barmode="group",
-        labels={"value": "Nilai (Juta Rp)", "variable": "", "Unor Singkat": ""},
-        text_auto=".2f",
-        color_discrete_sequence=["#124d7c", "#f5b700"],
-        hover_data={"Unit Organisasi": True},
-    )
-    fig_bar.update_traces(textposition="outside", textfont_size=10)
-    fig_bar.update_layout(
-        height=400,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=10, r=10, t=30, b=20),
-        font=dict(family="Inter", size=11, color="#475569"),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        hovermode="x unified",
-    )
-    fig_bar.update_xaxes(showgrid=False, title=None)
-    fig_bar.update_yaxes(showgrid=True, gridcolor="#edf1f5", title=None)
+        fig_bar = px.bar(
+            df_unor_agg,
+            x="Unor Singkat",
+            y=["Pagu (Juta)", "Realisasi (Juta)"],
+            barmode="group",
+            labels={"value": "Nilai (Juta Rp)", "variable": "", "Unor Singkat": ""},
+            text_auto=".2f",
+            color_discrete_sequence=["#124d7c", "#f5b700"],
+            hover_data={"Unit Organisasi": True},
+        )
+        fig_bar.update_traces(textposition="outside", textfont_size=10)
+        fig_bar.update_layout(
+            height=400,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=10, r=10, t=30, b=20),
+            font=dict(family="Inter", size=11, color="#475569"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            hovermode="x unified",
+        )
+        fig_bar.update_xaxes(showgrid=False, title=None)
+        fig_bar.update_yaxes(showgrid=True, gridcolor="#edf1f5", title=None)
 
-    st.plotly_chart(fig_bar, use_container_width=True, config={"displayModeBar": False})
-    html("</div>")
+        st.plotly_chart(fig_bar, use_container_width=True, config={"displayModeBar": False})
 
 with col_right:
-    html('<div class="content-card"><b>Distribusi Cluster Pekerjaan</b>')
+    with st.container(border=True):
+        html('<b>Distribusi Cluster Pekerjaan</b>')
 
-    df_cluster_agg = (
-        df_filtered["Cluster"]
-        .value_counts()
-        .reindex(CLUSTER_ORDER)
-        .dropna()
-        .reset_index()
-    )
-    df_cluster_agg.columns = ["Cluster", "Jumlah"]
+        df_cluster_agg = (
+            df_filtered["Cluster"]
+            .value_counts()
+            .reindex(CLUSTER_ORDER)
+            .dropna()
+            .reset_index()
+        )
+        df_cluster_agg.columns = ["Cluster", "Jumlah"]
 
-    fig_pie = px.pie(
-        df_cluster_agg,
-        names="Cluster",
-        values="Jumlah",
-        hole=0.58,
-        color="Cluster",
-        color_discrete_map=CLUSTER_COLOR_MAP,
-    )
-    fig_pie.update_traces(
-        textposition="inside",
-        textinfo="percent",
-        hovertemplate="<b>%{label}</b><br>%{value} paket (%{percent})<extra></extra>",
-    )
-    fig_pie.update_layout(
-        height=400,
-        paper_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=10, r=10, t=30, b=10),
-        font=dict(family="Inter", size=11),
-        legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
-    )
+        fig_pie = px.pie(
+            df_cluster_agg,
+            names="Cluster",
+            values="Jumlah",
+            hole=0.58,
+            color="Cluster",
+            color_discrete_map=CLUSTER_COLOR_MAP,
+        )
+        fig_pie.update_traces(
+            textposition="inside",
+            textinfo="percent",
+            hovertemplate="<b>%{label}</b><br>%{value} paket (%{percent})<extra></extra>",
+        )
+        fig_pie.update_layout(
+            height=400,
+            paper_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=10, r=10, t=30, b=10),
+            font=dict(family="Inter", size=11),
+            legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
+        )
 
-    st.plotly_chart(fig_pie, use_container_width=True, config={"displayModeBar": False})
-    html("</div>")
+        st.plotly_chart(fig_pie, use_container_width=True, config={"displayModeBar": False})
 
 
 # =========================================================
@@ -1078,24 +1078,24 @@ html('<div class="section-title">📌 Ringkasan Progress</div>')
 progress_col1, progress_col2 = st.columns(2)
 
 with progress_col1:
-    html('<div class="content-card"><b>Penyerapan Keuangan</b>')
-    st.progress(min(max(avg_real_keu / 100, 0), 1))
-    html(f"""
-    <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:0.8rem;color:#64748b;">
-        <span>Realisasi</span><b>{avg_real_keu:.2f}%</b>
-    </div>
-    </div>
-    """)
+    with st.container(border=True):
+        html('<b>Penyerapan Keuangan</b>')
+        st.progress(min(max(avg_real_keu / 100, 0), 1))
+        html(f"""
+        <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:0.8rem;color:#64748b;">
+            <span>Realisasi</span><b>{avg_real_keu:.2f}%</b>
+        </div>
+        """)
 
 with progress_col2:
-    html('<div class="content-card"><b>Progress Fisik</b>')
-    st.progress(min(max(avg_real_fisik / 100, 0), 1))
-    html(f"""
-    <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:0.8rem;color:#64748b;">
-        <span>Kemajuan pekerjaan</span><b>{avg_real_fisik:.2f}%</b>
-    </div>
-    </div>
-    """)
+    with st.container(border=True):
+        html('<b>Progress Fisik</b>')
+        st.progress(min(max(avg_real_fisik / 100, 0), 1))
+        html(f"""
+        <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:0.8rem;color:#64748b;">
+            <span>Kemajuan pekerjaan</span><b>{avg_real_fisik:.2f}%</b>
+        </div>
+        """)
 
 
 # =========================================================
@@ -1123,31 +1123,29 @@ df_prov_summary = df_prov_summary[
     ["Provinsi", "Pagu (Rp ribu)", "Realisasi (Rp ribu)", "Real. Keu (%)", "Real. Fis (%)"]
 ].sort_values("Pagu (Rp ribu)", ascending=False)
 
-html('<div class="content-card">')
-html("""
-<div style="font-size:0.95rem; font-weight:800; color:#1F4E78; margin-bottom:2px;">
-    Ringkasan Realisasi Paket Rehabilitasi &amp; Rekonstruksi per Provinsi
-</div>
-<div style="font-size:0.74rem; color:#94a3b8; margin-bottom:12px;">
-    Dihitung otomatis dari data yang sedang difilter (dalam Rp ribu)
-</div>
-""")
+with st.container(border=True):
+    html("""
+    <div style="font-size:0.95rem; font-weight:800; color:#1F4E78; margin-bottom:2px;">
+        Ringkasan Realisasi Paket Rehabilitasi &amp; Rekonstruksi per Provinsi
+    </div>
+    <div style="font-size:0.74rem; color:#94a3b8; margin-bottom:12px;">
+        Dihitung otomatis dari data yang sedang difilter (dalam Rp ribu)
+    </div>
+    """)
 
-if not df_prov_summary.empty:
-    styled_dataframe(
-        df_prov_summary,
-        {
-            "Pagu (Rp ribu)": "{:,.0f}",
-            "Realisasi (Rp ribu)": "{:,.0f}",
-            "Real. Keu (%)": "{:.2f}%",
-            "Real. Fis (%)": "{:.2f}%",
-        },
-        key="df_prov_summary",
-    )
-else:
-    st.info("Tidak ada data provinsi untuk pilihan filter saat ini.")
-
-html("</div>")
+    if not df_prov_summary.empty:
+        styled_dataframe(
+            df_prov_summary,
+            {
+                "Pagu (Rp ribu)": "{:,.0f}",
+                "Realisasi (Rp ribu)": "{:,.0f}",
+                "Real. Keu (%)": "{:.2f}%",
+                "Real. Fis (%)": "{:.2f}%",
+            },
+            key="df_prov_summary",
+        )
+    else:
+        st.info("Tidak ada data provinsi untuk pilihan filter saat ini.")
 
 
 # =========================================================
@@ -1155,70 +1153,67 @@ html("</div>")
 # =========================================================
 
 html('<div class="section-title">🏘️ Ringkasan Realisasi Paket per Kabupaten/Kota</div>')
-html('<div class="content-card">')
+with st.container(border=True):
+    if LOKASI_COL is None:
+        st.info(
+            "Kolom lokasi (Kabupaten/Kota) tidak ditemukan pada data (sheet 'Daftar Paket'). "
+            "Tambahkan kolom seperti 'Provinsi/Lokasi RO' atau 'Kabupaten/Kota' pada data agar ringkasan ini bisa ditampilkan."
+        )
+    elif df_prov_summary.empty:
+        st.info("Tidak ada data provinsi untuk pilihan filter saat ini.")
+    else:
+        province_list = df_prov_summary["Provinsi"].tolist()
+        kab_tabs = st.tabs(province_list)
 
-if LOKASI_COL is None:
-    st.info(
-        "Kolom lokasi (Kabupaten/Kota) tidak ditemukan pada data (sheet 'Daftar Paket'). "
-        "Tambahkan kolom seperti 'Provinsi/Lokasi RO' atau 'Kabupaten/Kota' pada data agar ringkasan ini bisa ditampilkan."
-    )
-elif df_prov_summary.empty:
-    st.info("Tidak ada data provinsi untuk pilihan filter saat ini.")
-else:
-    province_list = df_prov_summary["Provinsi"].tolist()
-    kab_tabs = st.tabs(province_list)
+        for tab, prov in zip(kab_tabs, province_list):
+            with tab:
+                df_kab = df_filtered[
+                    (df_filtered["Provinsi"] == prov)
+                    & df_filtered["_lokasi_clean"].notna()
+                ].copy()
 
-    for tab, prov in zip(kab_tabs, province_list):
-        with tab:
-            df_kab = df_filtered[
-                (df_filtered["Provinsi"] == prov)
-                & df_filtered["_lokasi_clean"].notna()
-            ].copy()
+                if df_kab.empty:
+                    st.info(f"Tidak ada data kabupaten/kota untuk provinsi {prov} pada filter saat ini.")
+                    continue
 
-            if df_kab.empty:
-                st.info(f"Tidak ada data kabupaten/kota untuk provinsi {prov} pada filter saat ini.")
-                continue
+                df_kab_summary = (
+                    df_kab
+                    .groupby("_lokasi_clean")
+                    .agg(**{
+                        "Pagu (Rp ribu)": ("Pagu (paket) (Rp ribu)", "sum"),
+                        "Realisasi (Rp ribu)": ("Realisasi (paket) (Rp ribu)", "sum"),
+                        "Real. Fis (%)": ("Real. Fis (%)", "mean"),
+                    })
+                    .reset_index()
+                    .rename(columns={"_lokasi_clean": "Kabupaten/Kota"})
+                )
 
-            df_kab_summary = (
-                df_kab
-                .groupby("_lokasi_clean")
-                .agg(**{
-                    "Pagu (Rp ribu)": ("Pagu (paket) (Rp ribu)", "sum"),
-                    "Realisasi (Rp ribu)": ("Realisasi (paket) (Rp ribu)", "sum"),
-                    "Real. Fis (%)": ("Real. Fis (%)", "mean"),
-                })
-                .reset_index()
-                .rename(columns={"_lokasi_clean": "Kabupaten/Kota"})
-            )
+                df_kab_summary["Real. Keu (%)"] = (
+                    df_kab_summary["Realisasi (Rp ribu)"] / df_kab_summary["Pagu (Rp ribu)"] * 100
+                ).fillna(0)
 
-            df_kab_summary["Real. Keu (%)"] = (
-                df_kab_summary["Realisasi (Rp ribu)"] / df_kab_summary["Pagu (Rp ribu)"] * 100
-            ).fillna(0)
+                df_kab_summary = df_kab_summary.sort_values(
+                    "Pagu (Rp ribu)", ascending=False
+                ).reset_index(drop=True)
 
-            df_kab_summary = df_kab_summary.sort_values(
-                "Pagu (Rp ribu)", ascending=False
-            ).reset_index(drop=True)
+                df_kab_summary.insert(
+                    0, "No", [to_roman(i + 1) for i in range(len(df_kab_summary))]
+                )
 
-            df_kab_summary.insert(
-                0, "No", [to_roman(i + 1) for i in range(len(df_kab_summary))]
-            )
+                df_kab_summary = df_kab_summary[
+                    ["No", "Kabupaten/Kota", "Pagu (Rp ribu)", "Realisasi (Rp ribu)", "Real. Keu (%)", "Real. Fis (%)"]
+                ]
 
-            df_kab_summary = df_kab_summary[
-                ["No", "Kabupaten/Kota", "Pagu (Rp ribu)", "Realisasi (Rp ribu)", "Real. Keu (%)", "Real. Fis (%)"]
-            ]
-
-            styled_dataframe(
-                df_kab_summary,
-                {
-                    "Pagu (Rp ribu)": "{:,.0f}",
-                    "Realisasi (Rp ribu)": "{:,.0f}",
-                    "Real. Keu (%)": "{:.2f}%",
-                    "Real. Fis (%)": "{:.2f}%",
-                },
-                key=f"df_kab_summary_{prov}",
-            )
-
-html("</div>")
+                styled_dataframe(
+                    df_kab_summary,
+                    {
+                        "Pagu (Rp ribu)": "{:,.0f}",
+                        "Realisasi (Rp ribu)": "{:,.0f}",
+                        "Real. Keu (%)": "{:.2f}%",
+                        "Real. Fis (%)": "{:.2f}%",
+                    },
+                    key=f"df_kab_summary_{prov}",
+                )
 
 
 # =========================================================
@@ -1226,38 +1221,37 @@ html("</div>")
 # =========================================================
 
 html('<div class="section-title">📑 Rincian Paket per Provinsi / Kabupaten</div>')
-html('<div class="content-card">')
+detail_card = st.container(border=True)
 
 
 def strip_provinsi_prefix(name: str) -> str:
     return re.sub(r"(?i)^provinsi\s+", "", str(name)).strip()
 
 
-if LOKASI_COL is not None and selected_kab != "Semua":
-    render_rincian_item(df_filtered, "Kabupaten/Kota", selected_kab)
+with detail_card:
+    if LOKASI_COL is not None and selected_kab != "Semua":
+        render_rincian_item(df_filtered, "Kabupaten/Kota", selected_kab)
 
-elif selected_prov != "Semua":
-    df_item_prov = df_filtered[df_filtered["_lokasi_clean"].isna()].copy() \
-        if LOKASI_COL is not None else df_filtered
-    render_rincian_item(df_item_prov, "Provinsi", strip_provinsi_prefix(selected_prov))
+    elif selected_prov != "Semua":
+        df_item_prov = df_filtered[df_filtered["_lokasi_clean"].isna()].copy() \
+            if LOKASI_COL is not None else df_filtered
+        render_rincian_item(df_item_prov, "Provinsi", strip_provinsi_prefix(selected_prov))
 
-else:
-    province_list = df_prov_summary["Provinsi"].tolist()
-
-    if province_list:
-        prov_tabs = st.tabs([strip_provinsi_prefix(p) for p in province_list])
-
-        for tab, prov in zip(prov_tabs, province_list):
-            with tab:
-                df_item_prov = df_filtered[
-                    (df_filtered["Provinsi"] == prov)
-                    & (df_filtered["_lokasi_clean"].isna() if LOKASI_COL is not None else True)
-                ].copy()
-                render_rincian_item(df_item_prov, "Provinsi", strip_provinsi_prefix(prov))
     else:
-        st.info("Tidak ada data untuk ditampilkan pada pilihan filter saat ini.")
+        province_list = df_prov_summary["Provinsi"].tolist()
 
-html("</div>")
+        if province_list:
+            prov_tabs = st.tabs([strip_provinsi_prefix(p) for p in province_list])
+
+            for tab, prov in zip(prov_tabs, province_list):
+                with tab:
+                    df_item_prov = df_filtered[
+                        (df_filtered["Provinsi"] == prov)
+                        & (df_filtered["_lokasi_clean"].isna() if LOKASI_COL is not None else True)
+                    ].copy()
+                    render_rincian_item(df_item_prov, "Provinsi", strip_provinsi_prefix(prov))
+        else:
+            st.info("Tidak ada data untuk ditampilkan pada pilihan filter saat ini.")
 
 
 # =========================================================
@@ -1320,9 +1314,8 @@ if not df_map.empty:
             fill_opacity=0.75,
         ).add_to(m)
 
-    html('<div class="content-card">')
-    st_folium(m, width=None, height=520, returned_objects=[])
-    html("</div>")
+    with st.container(border=True):
+        st_folium(m, width=None, height=520, returned_objects=[])
 
 else:
     st.info("Tidak ada koordinat lokasi yang tersedia untuk pilihan filter saat ini.")
@@ -1345,12 +1338,12 @@ other_abbrs = sorted(
     a for a in df_filtered_top["_unor_abbr"].dropna().unique() if a not in UNOR_ORDER
 )
 
-html('<div class="content-card">')
+top10_card = st.container(border=True)
 
 unor_tab_labels = [
     f"{UNOR_ICON.get(a, '📦')} {UNOR_FULLNAME.get(a, a)} ({a})" for a in UNOR_ORDER
 ]
-unor_tabs = st.tabs(unor_tab_labels)
+unor_tabs = top10_card.tabs(unor_tab_labels)
 
 for tab, abbr in zip(unor_tabs, UNOR_ORDER):
     with tab:
@@ -1406,14 +1399,12 @@ if other_abbrs:
                     hide_index=True,
                 )
 
-html("</div>")
-
 # =========================================================
 # ANALISIS & PENGELOMPOKAN KATEGORI (GROUP BY UNOR, PROVINSI, KATEGORI & SATUAN)
 # =========================================================
 
 html('<div class="section-title">🏷️ Analisis & Pengelompokan Kategori Paket</div>')
-html('<div class="content-card">')
+category_card = st.container(border=True)
 
 vol_col = find_col_by_keywords(df_filtered, ["vol", "volume", "panjang", "jumlah"])
 satuan_col = find_col_by_keywords(df_filtered, ["satuan", "unit"])
@@ -1422,14 +1413,14 @@ df_filtered_kat = df_filtered.copy()
 if vol_col and satuan_col:
     df_filtered_kat[vol_col] = pd.to_numeric(df_filtered_kat[vol_col], errors='coerce').fillna(0)
 
-html("""
+category_card.markdown("""
 <div style="font-size:0.95rem; font-weight:800; color:#1F4E78; margin-bottom:4px;">
     Rekapitulasi Paket & Volume Output Berdasarkan Unit Organisasi, Provinsi & Kategori
 </div>
 <div style="font-size:0.75rem; color:#64748b; margin-bottom:14px;">
     Tabel dikelompokkan berdasarkan <b>Unit Organisasi</b>, <b>Provinsi</b>, <b>Jenis Kegiatan (Kategori)</b>, dan dipecah terpisah per <b>Satuan Volume</b>.
 </div>
-""")
+""", unsafe_allow_html=True)
 
 # Group By dengan Unit Organisasi & Provinsi di Paling Depan
 custom_group = ["Unit Organisasi", "Provinsi", "Kategori"]
@@ -1466,17 +1457,47 @@ df_display_unor = df_display_unor.sort_values(
     ascending=[True, True, True]
 ).reset_index(drop=True)
 
-st.dataframe(
-    df_display_unor.style.format({"Total Pagu (Rp ribu)": "Rp {:,.0f}"}),
-    use_container_width=True,
-    hide_index=True
+df_display_unor["_unor_abbr"] = df_display_unor["Unit Organisasi"].apply(abbreviate_unor)
+
+other_abbrs_kat = sorted(
+    a for a in df_display_unor["_unor_abbr"].dropna().unique() if a not in UNOR_ORDER
 )
 
-html('<div style="height:20px;"></div>')
+kat_unor_tab_labels = [
+    f"{UNOR_ICON.get(a, '📦')} {UNOR_FULLNAME.get(a, a)} ({a})" for a in UNOR_ORDER
+]
+kat_unor_tabs = category_card.tabs(kat_unor_tab_labels)
+
+for tab, abbr in zip(kat_unor_tabs, UNOR_ORDER):
+    with tab:
+        df_kat_unor_sub = df_display_unor[df_display_unor["_unor_abbr"] == abbr].drop(columns=["_unor_abbr", "Unit Organisasi"])
+
+        if df_kat_unor_sub.empty:
+            st.info(f"Tidak ada data untuk unit organisasi {UNOR_FULLNAME.get(abbr, abbr)} pada filter saat ini.")
+        else:
+            st.dataframe(
+                df_kat_unor_sub.style.format({"Total Pagu (Rp ribu)": "Rp {:,.0f}"}),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+if other_abbrs_kat:
+    with category_card.expander(f"📦 Unit organisasi lainnya di luar BM/CK/SDA/PS ({', '.join(other_abbrs_kat)})"):
+        other_kat_tabs = st.tabs(other_abbrs_kat)
+        for tab, abbr in zip(other_kat_tabs, other_abbrs_kat):
+            with tab:
+                df_kat_unor_sub = df_display_unor[df_display_unor["_unor_abbr"] == abbr].drop(columns=["_unor_abbr", "Unit Organisasi"])
+                st.dataframe(
+                    df_kat_unor_sub.style.format({"Total Pagu (Rp ribu)": "Rp {:,.0f}"}),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+category_card.markdown('<div style="height:20px;"></div>', unsafe_allow_html=True)
 
 kat_list = sorted(df_filtered_kat["Kategori"].dropna().unique().tolist())
 if kat_list:
-    selected_view_kat = st.selectbox(
+    selected_view_kat = category_card.selectbox(
         "🔎 Pilih Kategori Pekerjaan untuk melihat rincian paket dan volumenya:",
         kat_list
     )
@@ -1505,14 +1526,11 @@ if kat_list:
     if vol_col and vol_col in df_kat_detail.columns:
         detail_fmt[vol_col] = "{:,.2f}"
         
-    st.dataframe(
+    category_card.dataframe(
         df_kat_detail.style.format(detail_fmt),
         use_container_width=True,
         hide_index=True
     )
-
-html("</div>")
-
 
 # =========================================================
 # DETAIL DATA
