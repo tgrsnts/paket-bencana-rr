@@ -44,6 +44,61 @@ def to_roman(n: int) -> str:
     return result
 
 
+# =========================================================
+# SINGKATAN UNIT ORGANISASI (BM / CK / SDA / PS)
+# =========================================================
+
+UNOR_ABBR_RULES = [
+    ("bina marga", "BM"),
+    ("cipta karya", "CK"),
+    ("sumber daya air", "SDA"),
+    ("prasarana strategis", "PS"),
+]
+
+UNOR_FULLNAME = {
+    "BM": "Bina Marga",
+    "CK": "Cipta Karya",
+    "SDA": "Sumber Daya Air",
+    "PS": "Prasarana Strategis",
+}
+
+
+def abbreviate_unor(name) -> str:
+    if not isinstance(name, str):
+        return str(name)
+    low = name.lower()
+    for keyword, abbr in UNOR_ABBR_RULES:
+        if keyword in low:
+            return abbr
+    return name
+
+
+def sort_ui(df: pd.DataFrame, key: str, default_col: str, columns=None, label="Urutkan tabel berdasarkan"):
+    """Tampilkan satu selectbox rapi (kolom + arah digabung) lalu kembalikan df terurut."""
+    cols = columns or list(df.columns)
+    default_col = default_col if default_col in cols else cols[0]
+
+    options = []
+    for c in cols:
+        options.append(f"{c} — Tertinggi ke Terendah")
+        options.append(f"{c} — Terendah ke Tertinggi")
+
+    default_option = f"{default_col} — Tertinggi ke Terendah"
+    default_index = options.index(default_option) if default_option in options else 0
+
+    selected_option = st.selectbox(
+        f"🔎 {label}:",
+        options,
+        index=default_index,
+        key=f"sort_{key}",
+    )
+
+    ascending = selected_option.endswith("Terendah ke Tertinggi")
+    sort_col = selected_option.rsplit(" — ", 1)[0]
+
+    return df.sort_values(sort_col, ascending=ascending).reset_index(drop=True)
+
+
 def styled_table_html(df, format_map):
     """Render dataframe jadi tabel HTML bergaya biru tua seperti Excel."""
     return (
@@ -126,6 +181,44 @@ def auto_categorize(nama_paket):
 
 
 # =========================================================
+# MAPPING CLUSTER (6 KELOMPOK BESAR UNTUK DONUT CHART)
+# =========================================================
+
+CLUSTER_MAP = {
+    'Rehabilitasi Jaringan Irigasi': 'Irigasi, Rawa, & Sungai',
+    'Pengendalian Banjir dan Normalisasi Sungai': 'Irigasi, Rawa, & Sungai',
+    'Pembangunan Cekdam': 'Irigasi, Rawa, & Sungai',
+    'Air Baku (Sumur air tanah)': 'Air Baku & Air Bersih',
+    'Rehabilitasi SPAM': 'Air Baku & Air Bersih',
+    'Sumur Bor': 'Air Baku & Air Bersih',
+    'Pembangunan/Rehabilitasi Jalan': 'Konektivitas',
+    'Pembangunan/Rehabilitasi Jembatan': 'Konektivitas',
+    'Rehabilitasi TPA': 'Sanitasi & Persampahan',
+    'Rehabilitasi IPLT': 'Sanitasi & Persampahan',
+    'Pembangunan Huntara': 'Rumah Hunian & Fasilitas Umum',
+    'Rehabilitasi Sarpras Kesehatan': 'Rumah Hunian & Fasilitas Umum',
+    'Rehabilitasi Sarpras Peribadatan': 'Rumah Hunian & Fasilitas Umum',
+    'Rehabilitasi Sarpras Ponpes': 'Rumah Hunian & Fasilitas Umum',
+    'Rehabilitasi Sarpras Madrasah': 'Rumah Hunian & Fasilitas Umum',
+}
+
+CLUSTER_COLOR_MAP = {
+    'Air Baku & Air Bersih': '#22b8c8',
+    'Konektivitas': '#e5383b',
+    'Sanitasi & Persampahan': '#f2b705',
+    'Irigasi, Rawa, & Sungai': '#1e40af',
+    'Rumah Hunian & Fasilitas Umum': '#b8860b',
+    'Lainnya': '#94a3b8',
+}
+
+CLUSTER_ORDER = list(CLUSTER_COLOR_MAP.keys())
+
+
+def map_to_cluster(kategori):
+    return CLUSTER_MAP.get(kategori, "Lainnya")
+
+
+# =========================================================
 # DATA LOADING
 # =========================================================
 
@@ -156,7 +249,10 @@ def load_data(file_source):
         df_paket["Kategori"] = df_paket[nama_col].apply(auto_categorize)
     elif "Nama Paket" in df_paket.columns:
         df_paket["Kategori"] = df_paket["Nama Paket"].apply(auto_categorize)
-        
+
+    if "Kategori" in df_paket.columns:
+        df_paket["Cluster"] = df_paket["Kategori"].apply(map_to_cluster)
+
     return df_ro, df_paket
 
 
@@ -226,9 +322,7 @@ def render_rincian_item(df_items: pd.DataFrame, level_label: str, level_name: st
         st.info(f"Tidak ada data paket untuk {level_label} {level_name} pada filter saat ini.")
         return
 
-    df_item = df_items.sort_values(
-        "Pagu (paket) (Rp ribu)", ascending=False
-    ).reset_index(drop=True).copy()
+    df_item = df_items.reset_index(drop=True).copy()
 
     df_item["Real. Keu (%)"] = (
         df_item["Realisasi (paket) (Rp ribu)"] / df_item["Pagu (paket) (Rp ribu)"] * 100
@@ -236,12 +330,9 @@ def render_rincian_item(df_items: pd.DataFrame, level_label: str, level_name: st
 
     if "No" in df_item.columns:
         df_item = df_item.drop(columns=["No"])
-    
-    df_item.insert(0, "No", df_item.index + 1)
 
-    df_item_display = df_item[
+    df_item_base = df_item[
         [
-            "No",
             "Nama Paket",
             "Pagu (paket) (Rp ribu)",
             "Realisasi (paket) (Rp ribu)",
@@ -252,7 +343,7 @@ def render_rincian_item(df_items: pd.DataFrame, level_label: str, level_name: st
         "Pagu (paket) (Rp ribu)": "Pagu (Rp ribu)",
         "Realisasi (paket) (Rp ribu)": "Realisasi (Rp ribu)",
     })
-    df_item_display["Real. Fis (%)"] = df_item_display["Real. Fis (%)"].fillna(0)
+    df_item_base["Real. Fis (%)"] = df_item_base["Real. Fis (%)"].fillna(0)
 
     if level_label == "Provinsi":
         subtitle = (
@@ -271,6 +362,12 @@ def render_rincian_item(df_items: pd.DataFrame, level_label: str, level_name: st
     </div>
     """)
 
+    sort_key = f"item_{level_label}_{level_name}"
+    df_item_display = sort_ui(
+        df_item_base, key=sort_key, default_col="Pagu (Rp ribu)"
+    )
+    df_item_display.insert(0, "No", df_item_display.index + 1)
+
     item_table_html = styled_table_html(
         df_item_display,
         {
@@ -283,6 +380,7 @@ def render_rincian_item(df_items: pd.DataFrame, level_label: str, level_name: st
 
     html(item_table_html)
     html('<div style="height:14px;"></div>')
+
 
     fig_combo = make_subplots(specs=[[{"secondary_y": True}]])
 
@@ -955,17 +1053,19 @@ with col_left:
         .sum()
         .reset_index()
     )
+    df_unor_agg["Unor Singkat"] = df_unor_agg["Unit Organisasi"].apply(abbreviate_unor)
     df_unor_agg["Pagu (Juta)"] = df_unor_agg["Pagu (paket) (Rp ribu)"] / 1_000_000
     df_unor_agg["Realisasi (Juta)"] = df_unor_agg["Realisasi (paket) (Rp ribu)"] / 1_000_000
 
     fig_bar = px.bar(
         df_unor_agg,
-        x="Unit Organisasi",
+        x="Unor Singkat",
         y=["Pagu (Juta)", "Realisasi (Juta)"],
         barmode="group",
-        labels={"value": "Nilai (Juta Rp)", "variable": ""},
+        labels={"value": "Nilai (Juta Rp)", "variable": "", "Unor Singkat": ""},
         text_auto=".2f",
         color_discrete_sequence=["#124d7c", "#f5b700"],
+        hover_data={"Unit Organisasi": True},
     )
     fig_bar.update_traces(textposition="outside", textfont_size=10)
     fig_bar.update_layout(
@@ -984,25 +1084,36 @@ with col_left:
     html("</div>")
 
 with col_right:
-    html('<div class="content-card"><b>Distribusi Kategori Pekerjaan</b>')
+    html('<div class="content-card"><b>Distribusi Cluster Pekerjaan</b>')
+
+    df_cluster_agg = (
+        df_filtered["Cluster"]
+        .value_counts()
+        .reindex(CLUSTER_ORDER)
+        .dropna()
+        .reset_index()
+    )
+    df_cluster_agg.columns = ["Cluster", "Jumlah"]
 
     fig_pie = px.pie(
-        df_filtered,
-        names="Kategori",
+        df_cluster_agg,
+        names="Cluster",
+        values="Jumlah",
         hole=0.58,
-        color_discrete_sequence=px.colors.sequential.Blues_r,
+        color="Cluster",
+        color_discrete_map=CLUSTER_COLOR_MAP,
     )
     fig_pie.update_traces(
         textposition="inside",
         textinfo="percent",
-        hovertemplate="<b>%{label}</b><br>%{percent}<extra></extra>",
+        hovertemplate="<b>%{label}</b><br>%{value} paket (%{percent})<extra></extra>",
     )
     fig_pie.update_layout(
         height=400,
         paper_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=10, r=10, t=30, b=10),
         font=dict(family="Inter", size=11),
-        legend=dict(orientation="h", yanchor="top", y=-0.02, xanchor="center", x=0.5),
+        legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
     )
 
     st.plotly_chart(fig_pie, use_container_width=True, config={"displayModeBar": False})
@@ -1074,8 +1185,11 @@ html("""
 """)
 
 if not df_prov_summary.empty:
+    df_prov_display = sort_ui(
+        df_prov_summary, key="prov_summary", default_col="Pagu (Rp ribu)"
+    )
     prov_table_html = styled_table_html(
-        df_prov_summary,
+        df_prov_display,
         {
             "Pagu (Rp ribu)": "{:,.0f}",
             "Realisasi (Rp ribu)": "{:,.0f}",
@@ -1135,9 +1249,12 @@ else:
                 df_kab_summary["Realisasi (Rp ribu)"] / df_kab_summary["Pagu (Rp ribu)"] * 100
             ).fillna(0)
 
-            df_kab_summary = df_kab_summary.sort_values(
-                "Pagu (Rp ribu)", ascending=False
-            ).reset_index(drop=True)
+            df_kab_summary = sort_ui(
+                df_kab_summary,
+                key=f"kab_summary_{prov}",
+                default_col="Pagu (Rp ribu)",
+                columns=["Kabupaten/Kota", "Pagu (Rp ribu)", "Realisasi (Rp ribu)", "Real. Keu (%)", "Real. Fis (%)"],
+            )
 
             df_kab_summary.insert(
                 0, "No", [to_roman(i + 1) for i in range(len(df_kab_summary))]
@@ -1269,29 +1386,84 @@ else:
 
 
 # =========================================================
-# TOP 10
+# TOP 10 PAKET BERDASARKAN REALISASI, PER UNIT ORGANISASI
 # =========================================================
 
-html('<div class="section-title">🏆 Top 10 Paket Berdasarkan Nilai Pagu</div>')
+html('<div class="section-title">🏆 Top 10 Paket Berdasarkan Realisasi per Unit Organisasi</div>')
 
-top10_paket = (
-    df_filtered
-    .nlargest(10, "Pagu (paket) (Rp ribu)")
-    [["Nama Paket", "Unit Organisasi", "Provinsi", "Pagu (paket) (Rp ribu)", "Real. Fis (%)"]]
-    .copy()
-)
-top10_paket["Pagu (Rp)"] = top10_paket["Pagu (paket) (Rp ribu)"] * 1000
+UNOR_ORDER = ["BM", "CK", "SDA", "PS"]
+UNOR_ICON = {"BM": "🛣️", "CK": "🏘️", "SDA": "💧", "PS": "🏗️"}
 
-top10_display = top10_paket[
-    ["Nama Paket", "Unit Organisasi", "Provinsi", "Pagu (Rp)", "Real. Fis (%)"]
-].copy()
+df_filtered_top = df_filtered.copy()
+df_filtered_top["_unor_abbr"] = df_filtered_top["Unit Organisasi"].apply(abbreviate_unor)
 
-st.dataframe(
-    top10_display.style.format({"Pagu (Rp)": "Rp {:,.0f}", "Real. Fis (%)": "{:.2f}%"}),
-    use_container_width=True,
-    hide_index=True,
+# Kelompok lain di luar BM/CK/SDA/PS (kalau ada), supaya data tidak hilang begitu saja
+other_abbrs = sorted(
+    a for a in df_filtered_top["_unor_abbr"].dropna().unique() if a not in UNOR_ORDER
 )
 
+html('<div class="content-card">')
+
+unor_tab_labels = [
+    f"{UNOR_ICON.get(a, '📦')} {UNOR_FULLNAME.get(a, a)} ({a})" for a in UNOR_ORDER
+]
+unor_tabs = st.tabs(unor_tab_labels)
+
+for tab, abbr in zip(unor_tabs, UNOR_ORDER):
+    with tab:
+        df_unor_top = df_filtered_top[df_filtered_top["_unor_abbr"] == abbr]
+
+        if df_unor_top.empty:
+            st.info(f"Tidak ada paket untuk unit organisasi {UNOR_FULLNAME.get(abbr, abbr)} pada filter saat ini.")
+        else:
+            top10_unor = (
+                df_unor_top
+                .nlargest(10, "Realisasi (paket) (Rp ribu)")
+                [["Nama Paket", "Provinsi", "Pagu (paket) (Rp ribu)", "Realisasi (paket) (Rp ribu)", "Real. Fis (%)"]]
+                .copy()
+            )
+            top10_unor["Pagu (Rp)"] = top10_unor["Pagu (paket) (Rp ribu)"] * 1000
+            top10_unor["Realisasi (Rp)"] = top10_unor["Realisasi (paket) (Rp ribu)"] * 1000
+            top10_display_unor = top10_unor[
+                ["Nama Paket", "Provinsi", "Pagu (Rp)", "Realisasi (Rp)", "Real. Fis (%)"]
+            ]
+
+            st.dataframe(
+                top10_display_unor.style.format({
+                    "Pagu (Rp)": "Rp {:,.0f}",
+                    "Realisasi (Rp)": "Rp {:,.0f}",
+                    "Real. Fis (%)": "{:.2f}%",
+                }),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+if other_abbrs:
+    with st.expander(f"📦 Unit organisasi lainnya di luar BM/CK/SDA/PS ({', '.join(other_abbrs)})"):
+        other_tabs = st.tabs(other_abbrs)
+        for tab, abbr in zip(other_tabs, other_abbrs):
+            with tab:
+                df_unor_top = df_filtered_top[df_filtered_top["_unor_abbr"] == abbr]
+                top10_unor = (
+                    df_unor_top
+                    .nlargest(10, "Realisasi (paket) (Rp ribu)")
+                    [["Nama Paket", "Provinsi", "Pagu (paket) (Rp ribu)", "Realisasi (paket) (Rp ribu)", "Real. Fis (%)"]]
+                    .copy()
+                )
+                top10_unor["Pagu (Rp)"] = top10_unor["Pagu (paket) (Rp ribu)"] * 1000
+                top10_unor["Realisasi (Rp)"] = top10_unor["Realisasi (paket) (Rp ribu)"] * 1000
+                st.dataframe(
+                    top10_unor[["Nama Paket", "Provinsi", "Pagu (Rp)", "Realisasi (Rp)", "Real. Fis (%)"]]
+                    .style.format({
+                        "Pagu (Rp)": "Rp {:,.0f}",
+                        "Realisasi (Rp)": "Rp {:,.0f}",
+                        "Real. Fis (%)": "{:.2f}%",
+                    }),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+html("</div>")
 
 # =========================================================
 # ANALISIS & PENGELOMPOKAN KATEGORI (GROUP BY UNOR, PROVINSI, KATEGORI & SATUAN)
