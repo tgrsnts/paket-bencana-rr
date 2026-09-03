@@ -73,63 +73,13 @@ def abbreviate_unor(name) -> str:
     return name
 
 
-def sort_ui(df: pd.DataFrame, key: str, default_col: str, columns=None, label="Urutkan tabel berdasarkan"):
-    """Tampilkan satu selectbox rapi (kolom + arah digabung) lalu kembalikan df terurut."""
-    cols = columns or list(df.columns)
-    default_col = default_col if default_col in cols else cols[0]
-
-    options = []
-    for c in cols:
-        options.append(f"{c} — Tertinggi ke Terendah")
-        options.append(f"{c} — Terendah ke Tertinggi")
-
-    default_option = f"{default_col} — Tertinggi ke Terendah"
-    default_index = options.index(default_option) if default_option in options else 0
-
-    selected_option = st.selectbox(
-        f"🔎 {label}:",
-        options,
-        index=default_index,
-        key=f"sort_{key}",
-    )
-
-    ascending = selected_option.endswith("Terendah ke Tertinggi")
-    sort_col = selected_option.rsplit(" — ", 1)[0]
-
-    return df.sort_values(sort_col, ascending=ascending).reset_index(drop=True)
-
-
-def styled_table_html(df, format_map):
-    """Render dataframe jadi tabel HTML bergaya biru tua seperti Excel."""
-    return (
-        df.style
-        .format(format_map)
-        .set_table_styles([
-            {"selector": "th", "props": [
-                ("background-color", "#1F4E78"),
-                ("color", "#ffffff"),
-                ("font-weight", "700"),
-                ("text-align", "left"),
-                ("padding", "9px 12px"),
-                ("font-size", "0.8rem"),
-                ("border", "none"),
-            ]},
-            {"selector": "td", "props": [
-                ("padding", "8px 12px"),
-                ("border-bottom", "1px solid #edf1f5"),
-                ("font-size", "0.83rem"),
-                ("color", "#334155"),
-            ]},
-            {"selector": "tr:hover td", "props": [
-                ("background-color", "#f5f8fc"),
-            ]},
-            {"selector": "table", "props": [
-                ("border-collapse", "collapse"),
-                ("width", "100%"),
-            ]},
-        ])
-        .hide(axis="index")
-        .to_html()
+def styled_dataframe(df, format_map, key=None):
+    """Render dataframe dengan st.dataframe (native Streamlit table) + formatting."""
+    st.dataframe(
+        df.style.format(format_map),
+        use_container_width=True,
+        hide_index=True,
+        key=key,
     )
 
 
@@ -363,12 +313,12 @@ def render_rincian_item(df_items: pd.DataFrame, level_label: str, level_name: st
     """)
 
     sort_key = f"item_{level_label}_{level_name}"
-    df_item_display = sort_ui(
-        df_item_base, key=sort_key, default_col="Pagu (Rp ribu)"
-    )
+    df_item_display = df_item_base.sort_values(
+        "Pagu (Rp ribu)", ascending=False
+    ).reset_index(drop=True)
     df_item_display.insert(0, "No", df_item_display.index + 1)
 
-    item_table_html = styled_table_html(
+    styled_dataframe(
         df_item_display,
         {
             "Pagu (Rp ribu)": "{:,.0f}".format,
@@ -376,9 +326,8 @@ def render_rincian_item(df_items: pd.DataFrame, level_label: str, level_name: st
             "Real. Keu (%)": "{:.2f}%".format,
             "Real. Fis (%)": "{:.2f}%".format,
         },
-    ).replace(",", ".")
-
-    html(item_table_html)
+        key=f"df_{sort_key}",
+    )
     html('<div style="height:14px;"></div>')
 
 
@@ -1185,19 +1134,16 @@ html("""
 """)
 
 if not df_prov_summary.empty:
-    df_prov_display = sort_ui(
-        df_prov_summary, key="prov_summary", default_col="Pagu (Rp ribu)"
-    )
-    prov_table_html = styled_table_html(
-        df_prov_display,
+    styled_dataframe(
+        df_prov_summary,
         {
             "Pagu (Rp ribu)": "{:,.0f}",
             "Realisasi (Rp ribu)": "{:,.0f}",
             "Real. Keu (%)": "{:.2f}%",
             "Real. Fis (%)": "{:.2f}%",
         },
+        key="df_prov_summary",
     )
-    html(prov_table_html)
 else:
     st.info("Tidak ada data provinsi untuk pilihan filter saat ini.")
 
@@ -1249,12 +1195,9 @@ else:
                 df_kab_summary["Realisasi (Rp ribu)"] / df_kab_summary["Pagu (Rp ribu)"] * 100
             ).fillna(0)
 
-            df_kab_summary = sort_ui(
-                df_kab_summary,
-                key=f"kab_summary_{prov}",
-                default_col="Pagu (Rp ribu)",
-                columns=["Kabupaten/Kota", "Pagu (Rp ribu)", "Realisasi (Rp ribu)", "Real. Keu (%)", "Real. Fis (%)"],
-            )
+            df_kab_summary = df_kab_summary.sort_values(
+                "Pagu (Rp ribu)", ascending=False
+            ).reset_index(drop=True)
 
             df_kab_summary.insert(
                 0, "No", [to_roman(i + 1) for i in range(len(df_kab_summary))]
@@ -1264,7 +1207,7 @@ else:
                 ["No", "Kabupaten/Kota", "Pagu (Rp ribu)", "Realisasi (Rp ribu)", "Real. Keu (%)", "Real. Fis (%)"]
             ]
 
-            kab_table_html = styled_table_html(
+            styled_dataframe(
                 df_kab_summary,
                 {
                     "Pagu (Rp ribu)": "{:,.0f}",
@@ -1272,8 +1215,8 @@ else:
                     "Real. Keu (%)": "{:.2f}%",
                     "Real. Fis (%)": "{:.2f}%",
                 },
+                key=f"df_kab_summary_{prov}",
             )
-            html(kab_table_html)
 
 html("</div>")
 
