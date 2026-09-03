@@ -14,7 +14,7 @@ import folium
 # =========================================================
 
 st.set_page_config(
-    page_title="Dashboard Paket Bencana RR",
+    page_title="Dashboard Paket Bencana Rekonstruksi & Rehabilitasi",
     page_icon="🏗️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -764,7 +764,7 @@ with st.sidebar:
     if LOGO_B64:
         brand_content = f'<img src="data:image/png;base64,{LOGO_B64}" alt="Logo PU">'
     else:
-        brand_content = '<div class="sidebar-brand-fallback">🏗️ Paket Bencana RR</div>'
+        brand_content = '<div class="sidebar-brand-fallback">🏗️ Paket Bencana Rekonstruksi & Rehabilitasi</div>'
 
     html(f"""
     <div class="sidebar-brand">{brand_content}</div>
@@ -911,7 +911,7 @@ if selected_bencana != "Semua":
 html("""
 <div class="dashboard-header">
     <div class="header-label">Dashboard Monitoring Infrastruktur</div>
-    <h1>📊 Paket Bencana RR</h1>
+    <h1>📊 Paket Bencana Rekonstruksi & Rehabilitasi</h1>
     <p>Monitoring status implementasi, progres fisik, dan realisasi anggaran paket pemulihan bencana.</p>
 </div>
 """)
@@ -1553,7 +1553,7 @@ with tab2:
 
 html("""
 <div class="dashboard-footer">
-    Dashboard Monitoring Paket Bencana RR<br>
+    Dashboard Monitoring Paket Bencana Rekonstruksi & Rehabilitasi<br>
     Data diperbarui berdasarkan file status 02 September 2026
 </div>
 """)
