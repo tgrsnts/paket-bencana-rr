@@ -98,58 +98,116 @@ LOGO_B64 = get_logo_base64(LOGO_PATH)
 
 # =========================================================
 # ATURAN MAPPING KATEGORI (KEYWORD MAPPER)
+# Nama kategori & pengelompokan cluster mengikuti
+# "Klasifikasi_Infrastruktur.xlsx": kolom C = nama kategori,
+# kolom D = cluster tempatnya.
 # =========================================================
 
 MAPPING_RULES = {
-    'Rehabilitasi Jaringan Irigasi': ['irigasi', 'd.i.', 'd.i '],
-    'Pengendalian Banjir dan Normalisasi Sungai': ['banjir', 'sungai', 'normalisasi'],
-    'Pembangunan Cekdam': ['cekdam'],
-    'Air Baku (Sumur air tanah)': ['air baku', 'sumur air'],
-    'Pembangunan/Rehabilitasi Jalan': ['jalan'],
-    'Pembangunan/Rehabilitasi Jembatan': ['jembatan'],
-    'Rehabilitasi SPAM': ['spam'],
-    'Sumur Bor': ['sumur bor'],
-    'Rehabilitasi TPA': ['tpa'],
-    'Rehabilitasi IPLT': ['iplt'],
-    'Pembangunan Huntara': ['huntara'],
-    'Rehabilitasi Sarpras Kesehatan': ['kesehatan', 'rsud', 'puskesmas'],
-    'Rehabilitasi Sarpras Peribadatan': ['peribadatan', 'masjid', 'gereja'],
-    'Rehabilitasi Sarpras Ponpes': ['ponpes', 'pesantren'],
-    'Rehabilitasi Sarpras Madrasah': ['madrasah', 'man', 'mts', 'min']
+    # --- Air Baku & Air Bersih ---
+    'JIAT': ['jiat', 'jaringan irigasi air tanah'],
+    'Air Baku (3T)': ['air baku (3t)', 'air baku 3t', 'daerah terpencil', 'kawasan sulit air'],
+    'Air Baku (Kawasan Strategis)': ['air baku kawasan', 'air baku (kawasan'],
+    'SPAM': ['spam'],
+    'Sumur': ['sumur bor', 'sumur air', 'sumur'],
+
+    # --- Irigasi, Rawa, & Sungai ---
+    'Bendung': ['bendung'],
+    'Sabodam': ['sabodam', 'lahar', 'sedimen'],
+    'Jaringan Irigasi': ['irigasi', 'd.i.', 'd.i '],
+    'Sungai dan Muara': ['banjir', 'sungai', 'normalisasi', 'muara'],
+
+    # --- Konektivitas ---
+    'Jalan': ['jalan'],
+    'Jembatan Daerah': ['jembatan'],
+
+    # --- Sanitasi & Persampahan ---
+    'TPA': ['tpa'],
+    'SPALD-S': ['spald', 'limbah domestik', 'air limbah'],
+    'IPLT': ['iplt'],
+
+    # --- Rumah Hunian & Fasilitas Umum ---
+    'Huntara': ['huntara', 'rumah hunian'],
+    'Kawasan': ['kawasan strategis', 'kawasan perkotaan', 'kawasan permukiman'],
+    'Gedung Pemerintahan': ['gedung negara', 'gedung pemerintahan'],
+    'Fasilitas Kesehatan': ['kesehatan', 'rsud', 'puskesmas'],
+    'Sarana Peribadatan': ['peribadatan', 'masjid', 'gereja'],
+    'Pondok Pesantren': ['ponpes', 'pesantren'],
+    'Madrasah': ['madrasah', 'man', 'mts', 'min'],
+    'Sarana Strategis Lainnya': ['sarana strategis lainnya'],
 }
+
+# Urutan pengecekan keyword: kategori yang lebih spesifik harus dicek
+# lebih dulu supaya tidak "tertelan" oleh kategori yang lebih umum
+# (mis. paket JIAT mengandung kata "irigasi" tapi harus masuk Air Baku,
+# bukan Jaringan Irigasi).
+_CATEGORY_CHECK_ORDER = [
+    'JIAT', 'Air Baku (Kawasan Strategis)', 'Air Baku (3T)', 'SPAM', 'Sumur',
+    'Bendung', 'Sabodam', 'Sungai dan Muara', 'Jaringan Irigasi',
+    'Jalan', 'Jembatan Daerah',
+    'TPA', 'SPALD-S', 'IPLT',
+    'Huntara', 'Kawasan', 'Gedung Pemerintahan',
+    'Fasilitas Kesehatan', 'Sarana Peribadatan', 'Pondok Pesantren', 'Madrasah',
+    'Sarana Strategis Lainnya',
+]
 
 
 def auto_categorize(nama_paket):
     if not isinstance(nama_paket, str):
         return "Lainnya / Cek Manual"
-    
+
     nama_lower = nama_paket.lower()
-    for kategori, keywords in MAPPING_RULES.items():
+    for kategori in _CATEGORY_CHECK_ORDER:
+        keywords = MAPPING_RULES.get(kategori, [])
         if any(kw in nama_lower for kw in keywords):
             return kategori
     return "Lainnya / Cek Manual"
 
 
+# Kategori yang dianggap BUKAN pekerjaan konstruksi fisik
+# (layanan, dokumen teknis, pembinaan & pengawasan, dsb).
+# Baris dengan Kategori ini bisa disembunyikan lewat toggle
+# "Hanya tampilkan pekerjaan konstruksi" di sidebar.
+NON_KONSTRUKSI_KATEGORI = {"Lainnya / Cek Manual"}
+
+
 # =========================================================
 # MAPPING CLUSTER (6 KELOMPOK BESAR UNTUK DONUT CHART & INFOGRAFIS)
+# Sesuai kolom D pada "Klasifikasi_Infrastruktur.xlsx"
 # =========================================================
 
 CLUSTER_MAP = {
-    'Rehabilitasi Jaringan Irigasi': 'Irigasi, Rawa, & Sungai',
-    'Pengendalian Banjir dan Normalisasi Sungai': 'Irigasi, Rawa, & Sungai',
-    'Pembangunan Cekdam': 'Irigasi, Rawa, & Sungai',
-    'Air Baku (Sumur air tanah)': 'Air Baku & Air Bersih',
-    'Rehabilitasi SPAM': 'Air Baku & Air Bersih',
-    'Sumur Bor': 'Air Baku & Air Bersih',
-    'Pembangunan/Rehabilitasi Jalan': 'Konektivitas',
-    'Pembangunan/Rehabilitasi Jembatan': 'Konektivitas',
-    'Rehabilitasi TPA': 'Sanitasi & Persampahan',
-    'Rehabilitasi IPLT': 'Sanitasi & Persampahan',
-    'Pembangunan Huntara': 'Rumah Hunian & Fasilitas Umum',
-    'Rehabilitasi Sarpras Kesehatan': 'Rumah Hunian & Fasilitas Umum',
-    'Rehabilitasi Sarpras Peribadatan': 'Rumah Hunian & Fasilitas Umum',
-    'Rehabilitasi Sarpras Ponpes': 'Rumah Hunian & Fasilitas Umum',
-    'Rehabilitasi Sarpras Madrasah': 'Rumah Hunian & Fasilitas Umum',
+    # Irigasi, Rawa, & Sungai
+    'Jaringan Irigasi': 'Irigasi, Rawa, & Sungai',
+    'Sungai dan Muara': 'Irigasi, Rawa, & Sungai',
+    'Bendung': 'Irigasi, Rawa, & Sungai',
+    'Sabodam': 'Irigasi, Rawa, & Sungai',
+
+    # Air Baku & Air Bersih
+    'JIAT': 'Air Baku & Air Bersih',
+    'Sumur': 'Air Baku & Air Bersih',
+    'Air Baku (3T)': 'Air Baku & Air Bersih',
+    'Air Baku (Kawasan Strategis)': 'Air Baku & Air Bersih',
+    'SPAM': 'Air Baku & Air Bersih',
+
+    # Konektivitas
+    'Jalan': 'Konektivitas',
+    'Jembatan Daerah': 'Konektivitas',
+
+    # Sanitasi & Persampahan
+    'TPA': 'Sanitasi & Persampahan',
+    'SPALD-S': 'Sanitasi & Persampahan',
+    'IPLT': 'Sanitasi & Persampahan',
+
+    # Rumah Hunian & Fasilitas Umum
+    'Kawasan': 'Rumah Hunian & Fasilitas Umum',
+    'Gedung Pemerintahan': 'Rumah Hunian & Fasilitas Umum',
+    'Sarana Strategis Lainnya': 'Rumah Hunian & Fasilitas Umum',
+    'Madrasah': 'Rumah Hunian & Fasilitas Umum',
+    'Sarana Peribadatan': 'Rumah Hunian & Fasilitas Umum',
+    'Fasilitas Kesehatan': 'Rumah Hunian & Fasilitas Umum',
+    'Pondok Pesantren': 'Rumah Hunian & Fasilitas Umum',
+    'Huntara': 'Rumah Hunian & Fasilitas Umum',
 }
 
 CLUSTER_COLOR_MAP = {
@@ -163,6 +221,60 @@ CLUSTER_COLOR_MAP = {
 
 CLUSTER_ORDER = list(CLUSTER_COLOR_MAP.keys())
 
+CLUSTER_ICON = {
+    'Air Baku & Air Bersih': '💧',
+    'Konektivitas': '🛣️',
+    'Sanitasi & Persampahan': '🗑️',
+    'Irigasi, Rawa, & Sungai': '🌾',
+    'Rumah Hunian & Fasilitas Umum': '🏠',
+    'Lainnya': '📦',
+}
+
+# Item yang ditampilkan pada tiap kartu infografis, per cluster.
+# (ikon, label yang ditampilkan, key kategori yang dipakai di get_cat_summary)
+CLUSTER_ITEMS = {
+    'Air Baku & Air Bersih': [
+        ("🚰", "SPAM", "SPAM"),
+        ("🌾", "JIAT", "JIAT"),
+        ("🕳️", "Sumur", "Sumur"),
+        ("🏜️", "Air Baku (3T)", "Air Baku (3T)"),
+        ("🏙️", "Air Baku (Kawasan Strategis)", "Air Baku (Kawasan Strategis)"),
+    ],
+    'Konektivitas': [
+        ("🛣️", "Jalan", "Jalan"),
+        ("🌉", "Jembatan Daerah", "Jembatan Daerah"),
+    ],
+    'Sanitasi & Persampahan': [
+        ("🚛", "TPA", "TPA"),
+        ("🚽", "SPALD-S", "SPALD-S"),
+        ("🧻", "IPLT", "IPLT"),
+    ],
+    'Irigasi, Rawa, & Sungai': [
+        ("🌾", "Jaringan Irigasi", "Jaringan Irigasi"),
+        ("🌊", "Sungai dan Muara", "Sungai dan Muara"),
+        ("🧱", "Bendung", "Bendung"),
+        ("🪨", "Sabodam", "Sabodam"),
+    ],
+    'Rumah Hunian & Fasilitas Umum': [
+        ("🏘️", "Kawasan", "Kawasan"),
+        ("🏢", "Gedung Pemerintahan", "Gedung Pemerintahan"),
+        ("🏗️", "Sarana Strategis Lainnya", "Sarana Strategis Lainnya"),
+        ("🏫", "Madrasah", "Madrasah"),
+        ("🕌", "Sarana Peribadatan", "Sarana Peribadatan"),
+        ("🏥", "Fasilitas Kesehatan", "Fasilitas Kesehatan"),
+        ("📖", "Pondok Pesantren", "Pondok Pesantren"),
+        ("🏕️", "Huntara", "Huntara"),
+    ],
+}
+
+CLUSTER_DISPLAY_ORDER = [
+    'Air Baku & Air Bersih',
+    'Konektivitas',
+    'Sanitasi & Persampahan',
+    'Irigasi, Rawa, & Sungai',
+    'Rumah Hunian & Fasilitas Umum',
+]
+
 
 def map_to_cluster(kategori):
     return CLUSTER_MAP.get(kategori, "Lainnya")
@@ -172,7 +284,6 @@ def map_to_cluster(kategori):
 # DATA LOADING
 # =========================================================
 
-DEFAULT_FILE_PATH = "Paket Bencana RR status 02-09-2026.xlsx"
 REQUIRED_SHEETS = ["Daftar RO", "Daftar Paket"]
 
 
@@ -187,14 +298,14 @@ def load_data(file_source):
         )
     df_ro = pd.read_excel(xls, sheet_name="Daftar RO")
     df_paket = pd.read_excel(xls, sheet_name="Daftar Paket")
-    
+
     # Cari kolom Nama Paket secara fleksibel
     nama_col = None
     for c in df_paket.columns:
         if "nama" in str(c).lower() and "paket" in str(c).lower():
             nama_col = c
             break
-            
+
     if nama_col:
         df_paket["Kategori"] = df_paket[nama_col].apply(auto_categorize)
     elif "Nama Paket" in df_paket.columns:
@@ -405,7 +516,7 @@ def render_rincian_item(df_items: pd.DataFrame, level_label: str, level_name: st
         dtick=1,
         tickfont=dict(size=11, color="#000000")
     )
-    
+
     fig_combo.update_yaxes(
         title_text="<b>Rp ribu</b>",
         showgrid=True,
@@ -567,10 +678,10 @@ section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button {
     color: #0f7a4b;
 }
 .upload-default {
-    background: #f4f6fa;
-    border: 1px solid #e2e8f0;
-    color: #64748b;
-    font-weight: 500;
+    background: #fff7e6;
+    border: 1px solid #ffe1a8;
+    color: #8a5a00;
+    font-weight: 600;
 }
 .upload-meta {
     font-size: 0.72rem;
@@ -829,7 +940,7 @@ with st.sidebar:
     <div class="sidebar-filters">
     """)
 
-    html('<div class="filter-title">📤&nbsp; Unggah Data Baru (.xlsx)</div>')
+    html('<div class="filter-title">📤&nbsp; Unggah Data (.xlsx)</div>')
     uploaded_file = st.file_uploader(
         "Unggah data",
         type=["xlsx"],
@@ -840,96 +951,136 @@ with st.sidebar:
         ),
     )
 
-    file_source = uploaded_file if uploaded_file is not None else DEFAULT_FILE_PATH
+    data_ok = False
 
-    try:
-        df_ro, df_paket = load_data(file_source)
-        data_ok = True
-    except Exception as e:
-        data_ok = False
-        st.error(f"Gagal memuat data.\n\n**Detail:** {e}")
+    if uploaded_file is not None:
+        try:
+            df_ro, df_paket = load_data(uploaded_file)
+            data_ok = True
+        except Exception as e:
+            st.error(f"Gagal memuat data.\n\n**Detail:** {e}")
 
-    if uploaded_file is not None and data_ok:
-        html(f"""
-        <div class="upload-status upload-ok">
-            ✅ <b>{uploaded_file.name}</b> berhasil dimuat &amp; dianalisis
-            <span class="upload-meta">{len(df_paket):,} paket · {len(df_ro):,} baris RO</span>
-        </div>
-        """)
-    elif uploaded_file is None:
+        if data_ok:
+            html(f"""
+            <div class="upload-status upload-ok">
+                ✅ <b>{uploaded_file.name}</b> berhasil dimuat &amp; dianalisis
+                <span class="upload-meta">{len(df_paket):,} paket · {len(df_ro):,} baris RO</span>
+            </div>
+            """)
+    else:
         html("""
         <div class="upload-status upload-default">
-            📁 Menggunakan data default (belum ada file diunggah)
+            📁 Belum ada data yang diunggah — silakan unggah file Excel untuk mulai analisis
         </div>
         """)
 
     html("</div>")
 
-    if not data_ok:
-        st.stop()
-
-    LOKASI_COL = find_lokasi_col(df_paket)
-    if LOKASI_COL is not None:
-        df_paket["_lokasi_clean"] = df_paket.apply(
-            lambda r: normalize_lokasi(r[LOKASI_COL])
-            if is_specific_kabupaten(r[LOKASI_COL], r["Provinsi"]) else None,
-            axis=1,
+    if data_ok:
+        html('<div class="sidebar-filters">')
+        html('<div class="filter-title">🏗️&nbsp; Jenis Data</div>')
+        only_konstruksi = st.checkbox(
+            "Hanya pekerjaan konstruksi",
+            value=True,
+            help=(
+                "Saat aktif, baris berkategori 'Lainnya / Cek Manual' "
+                "(layanan, dokumen teknis, pembinaan & pengawasan, dsb — bukan pekerjaan fisik konstruksi) "
+                "disembunyikan dari seluruh dashboard."
+            ),
         )
-    else:
-        df_paket["_lokasi_clean"] = None
+        if only_konstruksi:
+            df_paket = df_paket[~df_paket["Kategori"].isin(NON_KONSTRUKSI_KATEGORI)].reset_index(drop=True)
+        html("</div>")
 
-    html('<div class="sidebar-filters">')
+        LOKASI_COL = find_lokasi_col(df_paket)
+        if LOKASI_COL is not None:
+            df_paket["_lokasi_clean"] = df_paket.apply(
+                lambda r: normalize_lokasi(r[LOKASI_COL])
+                if is_specific_kabupaten(r[LOKASI_COL], r["Provinsi"]) else None,
+                axis=1,
+            )
+        else:
+            df_paket["_lokasi_clean"] = None
 
-    html('<div class="filter-title">🏢&nbsp; Unit Organisasi</div>')
-    unor_options = ["Semua"] + sorted(
-        df_paket["Unit Organisasi"].dropna().astype(str).unique().tolist()
-    )
-    selected_unor = st.selectbox(
-        "Unit Organisasi", unor_options, label_visibility="collapsed"
-    )
+        html('<div class="sidebar-filters">')
 
-    html('<div class="filter-title">📍&nbsp; Provinsi</div>')
-    prov_options = ["Semua"] + sorted(
-        df_paket["Provinsi"].dropna().astype(str).unique().tolist()
-    )
-    selected_prov = st.selectbox(
-        "Provinsi", prov_options, label_visibility="collapsed"
-    )
-
-    html('<div class="filter-title">🏘️&nbsp; Kabupaten/Kota</div>')
-    if LOKASI_COL is not None:
-        kab_source = df_paket if selected_prov == "Semua" else df_paket[df_paket["Provinsi"] == selected_prov]
-        kab_options = ["Semua"] + sorted(
-            kab_source["_lokasi_clean"].dropna().astype(str).unique().tolist()
+        html('<div class="filter-title">🏢&nbsp; Unit Organisasi</div>')
+        unor_options = ["Semua"] + sorted(
+            df_paket["Unit Organisasi"].dropna().astype(str).unique().tolist()
         )
-        selected_kab = st.selectbox(
-            "Kabupaten/Kota", kab_options, label_visibility="collapsed"
+        selected_unor = st.selectbox(
+            "Unit Organisasi", unor_options, label_visibility="collapsed"
         )
-    else:
-        selected_kab = "Semua"
-        html("""
-        <div class="info-box" style="font-size:0.74rem;">
-            Kolom lokasi (Kabupaten/Kota) tidak ditemukan pada data 'Daftar Paket'.
+
+        html('<div class="filter-title">📍&nbsp; Provinsi</div>')
+        prov_options = ["Semua"] + sorted(
+            df_paket["Provinsi"].dropna().astype(str).unique().tolist()
+        )
+        selected_prov = st.selectbox(
+            "Provinsi", prov_options, label_visibility="collapsed"
+        )
+
+        html('<div class="filter-title">🏘️&nbsp; Kabupaten/Kota</div>')
+        if LOKASI_COL is not None:
+            kab_source = df_paket if selected_prov == "Semua" else df_paket[df_paket["Provinsi"] == selected_prov]
+            kab_options = ["Semua"] + sorted(
+                kab_source["_lokasi_clean"].dropna().astype(str).unique().tolist()
+            )
+            selected_kab = st.selectbox(
+                "Kabupaten/Kota", kab_options, label_visibility="collapsed"
+            )
+        else:
+            selected_kab = "Semua"
+            html("""
+            <div class="info-box" style="font-size:0.74rem;">
+                Kolom lokasi (Kabupaten/Kota) tidak ditemukan pada data 'Daftar Paket'.
+            </div>
+            """)
+
+        html('<div class="filter-title">🧱&nbsp; Kategori Pekerjaan</div>')
+        kategori_options = ["Semua"] + sorted(
+            df_paket["Kategori"].dropna().astype(str).unique().tolist()
+        )
+        selected_kategori = st.selectbox(
+            "Kategori", kategori_options, label_visibility="collapsed"
+        )
+
+        html('<div class="filter-title">🌪️&nbsp; Jenis Bencana</div>')
+        bencana_options = ["Semua"] + sorted(
+            df_paket["Jenis Bencana"].dropna().astype(str).unique().tolist()
+        )
+        selected_bencana = st.selectbox(
+            "Jenis Bencana", bencana_options, label_visibility="collapsed"
+        )
+
+        html("</div>")
+
+
+# =========================================================
+# STOP DI SINI KALAU BELUM ADA DATA YANG DIUNGGAH
+# =========================================================
+
+if not data_ok:
+    html("""
+    <div class="dashboard-header">
+        <div class="header-label">Dashboard Monitoring Infrastruktur</div>
+        <h1>📊 Penanganan Rehabilitasi dan Rekonstruksi Pasca Bencana</h1>
+        <p>Silakan unggah file Excel data paket melalui panel di sebelah kiri untuk mulai menganalisis.</p>
+    </div>
+    """)
+    html("""
+    <div class="content-card" style="text-align:center; padding:60px 20px;">
+        <div style="font-size:48px; margin-bottom:12px;">📂</div>
+        <div style="font-size:1.05rem; font-weight:800; color:#1F4E78; margin-bottom:6px;">
+            Belum Ada Data untuk Dianalisis
         </div>
-        """)
-
-    html('<div class="filter-title">🧱&nbsp; Kategori Pekerjaan</div>')
-    kategori_options = ["Semua"] + sorted(
-        df_paket["Kategori"].dropna().astype(str).unique().tolist()
-    )
-    selected_kategori = st.selectbox(
-        "Kategori", kategori_options, label_visibility="collapsed"
-    )
-
-    html('<div class="filter-title">🌪️&nbsp; Jenis Bencana</div>')
-    bencana_options = ["Semua"] + sorted(
-        df_paket["Jenis Bencana"].dropna().astype(str).unique().tolist()
-    )
-    selected_bencana = st.selectbox(
-        "Jenis Bencana", bencana_options, label_visibility="collapsed"
-    )
-
-    html("</div>")
+        <div style="font-size:0.85rem; color:#64748b; max-width:480px; margin:0 auto;">
+            Unggah file Excel (.xlsx) dengan sheet <b>'Daftar RO'</b> dan <b>'Daftar Paket'</b>
+            melalui panel di sebelah kiri untuk mulai melihat ringkasan, grafik, dan rincian paket.
+        </div>
+    </div>
+    """)
+    st.stop()
 
 
 # =========================================================
@@ -1054,15 +1205,15 @@ with col_left:
             .reset_index()
         )
         df_unor_agg["Unor Singkat"] = df_unor_agg["Unit Organisasi"].apply(abbreviate_unor)
-        df_unor_agg["Pagu (Juta)"] = df_unor_agg["Pagu (paket) (Rp ribu)"] / 1_000_000
-        df_unor_agg["Realisasi (Juta)"] = df_unor_agg["Realisasi (paket) (Rp ribu)"] / 1_000_000
+        df_unor_agg["Pagu (Miliar)"] = df_unor_agg["Pagu (paket) (Rp ribu)"] / 1_000_000
+        df_unor_agg["Realisasi (Miliar)"] = df_unor_agg["Realisasi (paket) (Rp ribu)"] / 1_000_000
 
         fig_bar = px.bar(
             df_unor_agg,
             x="Unor Singkat",
-            y=["Pagu (Juta)", "Realisasi (Juta)"],
+            y=["Pagu (Miliar)", "Realisasi (Miliar)"],
             barmode="group",
-            labels={"value": "Nilai (Juta Rp)", "variable": "", "Unor Singkat": ""},
+            labels={"value": "Nilai (Miliar Rp)", "variable": "", "Unor Singkat": ""},
             text_auto=".2f",
             color_discrete_sequence=["#124d7c", "#f5b700"],
             hover_data={"Unit Organisasi": True},
@@ -1084,7 +1235,7 @@ with col_left:
 
 with col_right:
     with st.container(border=True):
-        html('<b>Distribusi Cluster Pekerjaan</b>')
+        html('<b>Kategori Pekerjaan</b>')
 
         df_cluster_agg = (
             df_filtered["Cluster"]
@@ -1150,137 +1301,65 @@ with progress_col2:
 
 # =========================================================
 # INFOGRAFIS TAMPILAN REKAPITULASI PENANGANAN BENCANA (INFOGRAPHIC CARDS)
+# Data-driven sesuai "Klasifikasi_Infrastruktur.xlsx":
+# kolom C = nama kategori, kolom D = cluster tempatnya.
 # =========================================================
 
 html('<div class="section-title">📋 Ringkasan Output Infrastruktur Penanganan Bencana</div>')
 
-# Helper function kalkulasi agregasi per kategori dari dataframe terfilter
 vol_col_info = find_col_by_keywords(df_filtered, ["vol", "volume", "panjang", "jumlah"])
 satuan_col_info = find_col_by_keywords(df_filtered, ["satuan", "unit"])
+
 
 def get_cat_summary(kategori_name):
     df_sub = df_filtered[df_filtered["Kategori"] == kategori_name]
     paket_cnt = len(df_sub)
+    if paket_cnt == 0:
+        return "0 Paket"
     if vol_col_info and vol_col_info in df_sub.columns:
         vol_sum = pd.to_numeric(df_sub[vol_col_info], errors='coerce').fillna(0).sum()
-        satuan = df_sub[satuan_col_info].dropna().iloc[0] if (satuan_col_info and not df_sub[satuan_col_info].dropna().empty) else "Unit"
-        return f"{vol_sum:,.0f} {satuan}".strip()
+        if vol_sum > 0:
+            satuan = df_sub[satuan_col_info].dropna().iloc[0] if (satuan_col_info and not df_sub[satuan_col_info].dropna().empty) else "Unit"
+            return f"{vol_sum:,.0f} {satuan}".strip()
     return f"{paket_cnt} Paket"
+
+
+def render_cluster_card(cluster_name):
+    items = CLUSTER_ITEMS.get(cluster_name, [])
+    color = CLUSTER_COLOR_MAP.get(cluster_name, '#94a3b8')
+    icon = CLUSTER_ICON.get(cluster_name, '📦')
+
+    rows_html = ""
+    for item_icon, label, kat_key in items:
+        rows_html += f"""
+        <div class="info-item-row">
+            <div class="info-item-icon">{item_icon}</div>
+            <div><b>{label}:</b> <span class="info-item-val">{get_cat_summary(kat_key)}</span></div>
+        </div>
+        """
+
+    html(f"""
+    <div class="info-card-container" style="margin-bottom: 20px;">
+        <div class="info-card-header" style="background: linear-gradient(90deg, {color}, {color}cc);">
+            {icon} {cluster_name}
+        </div>
+        <div class="info-card-body">
+            {rows_html}
+        </div>
+    </div>
+    """)
+
 
 info_col1, info_col2 = st.columns(2)
 
 with info_col1:
-    # 1. AIR BAKU & AIR BERSIH
-    html(f"""
-    <div class="info-card-container" style="margin-bottom: 20px;">
-        <div class="info-card-header" style="background: linear-gradient(90deg, #22b8c8, #0ea5e9);">
-            💧 Air Baku &amp; Air Bersih
-        </div>
-        <div class="info-card-body">
-            <div class="info-item-row">
-                <div class="info-item-icon">🚰</div>
-                <div><b>SPAM:</b> <span class="info-item-val">{get_cat_summary('Rehabilitasi SPAM')}</span></div>
-            </div>
-            <div class="info-item-row">
-                <div class="info-item-icon">🏞️</div>
-                <div><b>Air Baku:</b> <span class="info-item-val">{get_cat_summary('Air Baku (Sumur air tanah)')}</span></div>
-            </div>
-            <div class="info-item-row">
-                <div class="info-item-icon">🕳️</div>
-                <div><b>Sumur Bor:</b> <span class="info-item-val">{get_cat_summary('Sumur Bor')}</span></div>
-            </div>
-        </div>
-    </div>
-    """)
-
-    # 2. KONEKTIVITAS
-    html(f"""
-    <div class="info-card-container" style="margin-bottom: 20px;">
-        <div class="info-card-header" style="background: linear-gradient(90deg, #e5383b, #ef4444);">
-            🛣️ Konektivitas
-        </div>
-        <div class="info-card-body">
-            <div class="info-item-row">
-                <div class="info-item-icon">🛣️</div>
-                <div><b>Jalan:</b> <span class="info-item-val">{get_cat_summary('Pembangunan/Rehabilitasi Jalan')}</span></div>
-            </div>
-            <div class="info-item-row">
-                <div class="info-item-icon">🌉</div>
-                <div><b>Jembatan:</b> <span class="info-item-val">{get_cat_summary('Pembangunan/Rehabilitasi Jembatan')}</span></div>
-            </div>
-        </div>
-    </div>
-    """)
-
-    # 3. SANITASI & PERSAMPAHAN
-    html(f"""
-    <div class="info-card-container">
-        <div class="info-card-header" style="background: linear-gradient(90deg, #f2b705, #eab308);">
-            🗑️ Sanitasi &amp; Persampahan
-        </div>
-        <div class="info-card-body">
-            <div class="info-item-row">
-                <div class="info-item-icon">🚛</div>
-                <div><b>TPA:</b> <span class="info-item-val">{get_cat_summary('Rehabilitasi TPA')}</span></div>
-            </div>
-            <div class="info-item-row">
-                <div class="info-item-icon">🚽</div>
-                <div><b>IPLT:</b> <span class="info-item-val">{get_cat_summary('Rehabilitasi IPLT')}</span></div>
-            </div>
-        </div>
-    </div>
-    """)
+    render_cluster_card('Air Baku & Air Bersih')
+    render_cluster_card('Konektivitas')
+    render_cluster_card('Sanitasi & Persampahan')
 
 with info_col2:
-    # 4. IRIGASI, RAWA, & SUNGAI
-    html(f"""
-    <div class="info-card-container" style="margin-bottom: 20px;">
-        <div class="info-card-header" style="background: linear-gradient(90deg, #1e40af, #2563eb);">
-            🌾 Irigasi, Rawa, &amp; Sungai
-        </div>
-        <div class="info-card-body">
-            <div class="info-item-row">
-                <div class="info-item-icon">🌊</div>
-                <div><b>Pengendalian Banjir &amp; Sungai:</b> <span class="info-item-val">{get_cat_summary('Pengendalian Banjir dan Normalisasi Sungai')}</span></div>
-            </div>
-            <div class="info-item-row">
-                <div class="info-item-icon">🧱</div>
-                <div><b>Cekdam:</b> <span class="info-item-val">{get_cat_summary('Pembangunan Cekdam')}</span></div>
-            </div>
-            <div class="info-item-row">
-                <div class="info-item-icon">🌾</div>
-                <div><b>Irigasi:</b> <span class="info-item-val">{get_cat_summary('Rehabilitasi Jaringan Irigasi')}</span></div>
-            </div>
-        </div>
-    </div>
-    """)
-
-    # 5. RUMAH HUNIAN & FASILITAS UMUM
-    html(f"""
-    <div class="info-card-container">
-        <div class="info-card-header" style="background: linear-gradient(90deg, #b8860b, #d97706);">
-            🏠 Rumah Hunian &amp; Fasilitas Umum
-        </div>
-        <div class="info-card-body">
-            <div class="info-item-row">
-                <div class="info-item-icon">🏕️</div>
-                <div><b>Huntara:</b> <span class="info-item-val">{get_cat_summary('Pembangunan Huntara')}</span></div>
-            </div>
-            <div class="info-item-row">
-                <div class="info-item-icon">🏥</div>
-                <div><b>Kesehatan:</b> <span class="info-item-val">{get_cat_summary('Rehabilitasi Sarpras Kesehatan')}</span></div>
-            </div>
-            <div class="info-item-row">
-                <div class="info-item-icon">🕌</div>
-                <div><b>Peribadatan:</b> <span class="info-item-val">{get_cat_summary('Rehabilitasi Sarpras Peribadatan')}</span></div>
-            </div>
-            <div class="info-item-row">
-                <div class="info-item-icon">🏫</div>
-                <div><b>Ponpes &amp; Madrasah:</b> <span class="info-item-val">{get_cat_summary('Rehabilitasi Sarpras Ponpes')} / {get_cat_summary('Rehabilitasi Sarpras Madrasah')}</span></div>
-            </div>
-        </div>
-    </div>
-    """)
+    render_cluster_card('Irigasi, Rawa, & Sungai')
+    render_cluster_card('Rumah Hunian & Fasilitas Umum')
 
 
 # =========================================================
@@ -1319,11 +1398,11 @@ if vol_col and satuan_col:
             "Total Pagu (Rp ribu)": ("Pagu (paket) (Rp ribu)", "sum")
         }
     ).reset_index()
-    
+
     df_grouped_unor["Volume Output"] = df_grouped_unor.apply(
         lambda r: f"{r['Total Volume']:,.2f} {r[satuan_col]}".rstrip('0').rstrip('.'), axis=1
     )
-    
+
     df_display_unor = df_grouped_unor[
         ["Unit Organisasi", "Provinsi", "Kategori", "Volume Output", "Jumlah Paket", "Total Pagu (Rp ribu)"]
     ].rename(columns={"Kategori": "Jenis Kegiatan"})
@@ -1337,7 +1416,7 @@ else:
     df_display_unor = df_grouped_unor.rename(columns={"Kategori": "Jenis Kegiatan"})
 
 df_display_unor = df_display_unor.sort_values(
-    ["Unit Organisasi", "Provinsi", "Jenis Kegiatan"], 
+    ["Unit Organisasi", "Provinsi", "Jenis Kegiatan"],
     ascending=[True, True, True]
 ).reset_index(drop=True)
 
@@ -1388,23 +1467,23 @@ if kat_list:
         "🔎 Pilih Kategori Pekerjaan untuk melihat rincian paket dan volumenya:",
         kat_list
     )
-    
+
     show_cols = ["Nama Paket", "Unit Organisasi", "Provinsi"]
     if vol_col:
         show_cols.append(vol_col)
     if satuan_col:
         show_cols.append(satuan_col)
     show_cols.extend(["Pagu (paket) (Rp ribu)", "Realisasi (paket) (Rp ribu)", "Real. Fis (%)"])
-    
+
     df_kat_detail = df_filtered_kat[df_filtered_kat["Kategori"] == selected_view_kat][
         [c for c in show_cols if c in df_filtered_kat.columns]
     ].copy()
-    
+
     df_kat_detail = df_kat_detail.rename(columns={
         "Pagu (paket) (Rp ribu)": "Pagu (Rp ribu)",
         "Realisasi (paket) (Rp ribu)": "Realisasi (Rp ribu)"
     })
-    
+
     detail_fmt = {
         "Pagu (Rp ribu)": "{:,.0f}",
         "Realisasi (Rp ribu)": "{:,.0f}",
@@ -1412,7 +1491,7 @@ if kat_list:
     }
     if vol_col and vol_col in df_kat_detail.columns:
         detail_fmt[vol_col] = "{:,.2f}"
-        
+
     category_card.dataframe(
         df_kat_detail.style.format(detail_fmt),
         use_container_width=True,
@@ -1740,7 +1819,6 @@ with tab2:
 
 html("""
 <div class="dashboard-footer">
-    Dashboard Monitoring Penanganan Rehabilitasi dan Rekonstruksi Pasca Bencana<br>
-    Data diperbarui berdasarkan file status 02 September 2026
+    Dashboard Monitoring Penanganan Rehabilitasi dan Rekonstruksi Pasca Bencana
 </div>
 """)
