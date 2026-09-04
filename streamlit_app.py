@@ -80,6 +80,30 @@ def abbreviate_unor(name) -> str:
     return name
 
 
+def fmt_num(value, decimals: int = 2):
+    """Format angka dengan hingga `decimals` angka di belakang koma.
+    Kalau seluruh angka di belakang koma bernilai 0 (mis. 100.00),
+    ditampilkan sebagai bilangan bulat saja (100), bukan 100.00."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return value
+    if pd.isna(v):
+        return value
+    rounded = round(v, decimals)
+    if abs(rounded - round(rounded)) < 1e-9:
+        return f"{int(round(rounded)):,}"
+    return f"{rounded:,.{decimals}f}"
+
+
+def fmt_percent(value, decimals: int = 2):
+    return f"{fmt_num(value, decimals)}%"
+
+
+def fmt_rupiah(value, decimals: int = 2, prefix: str = "Rp "):
+    return f"{prefix}{fmt_num(value, decimals)}"
+
+
 def styled_dataframe(df, format_map, key=None):
     """Render dataframe dengan st.dataframe (native Streamlit table) + formatting."""
     st.dataframe(
@@ -111,11 +135,12 @@ LOGO_B64 = get_logo_base64(LOGO_PATH)
 #   Kolom C = Kategori
 #   Kolom D = Cluster
 #
-# Baris yang Kategorinya kosong di Excel (kolom C = NaN) adalah RO
-# yang BUKAN pekerjaan konstruksi fisik (layanan, dokumen teknis,
-# pembinaan & pengawasan, pengadaan tanah, dsb) -> tetap dipetakan
-# eksplisit ke "Lainnya" supaya jelas datanya dikenali,
-# bukan sekadar jatuh ke fallback.
+# Hanya RO yang punya padanan Kategori & Cluster fisik yang dipetakan di
+# sini. RO yang bukan pekerjaan konstruksi fisik (layanan, dokumen teknis,
+# pembinaan & pengawasan, pengadaan tanah, dsb) SENGAJA tidak dimasukkan
+# ke dalam mapping ini, sehingga baris datanya akan dibuang sepenuhnya
+# (lihat auto_categorize & load_data) alih-alih ditampilkan sebagai
+# kategori "Lainnya".
 # =========================================================
 
 RO_TO_KATEGORI_RAW = {
@@ -126,19 +151,12 @@ RO_TO_KATEGORI_RAW = {
     "JIAT untuk Mendukung Swasembada Pangan": "JIAT",
     "Sumur Air Tanah pada Kawasan Sulit Air, Bencana Kekeringan, dan Terpencil (3T)": "Sumur",
     "Prasarana Pengendali Lahar/Sedimen": "Sabodam",
-    "Bidang Tanah untuk Infrastruktur Sumber Daya Air": "Lainnya",
-    "Layanan Teknis Pelaksanaan Pengelolaan Sumber Daya Air": "Lainnya",
-    "Dokumen Pengembangan dan Perekayasaan Balai Teknik/Balai": "Lainnya",
     "Prasarana Air Baku Kawasan Sulit Air, Bencana Kekeringan, dan Kawasan Terpencil (3T)": "Air Baku (3T)",
-    "Dokumen Teknis Bidang Sungai dan Pantai": "Lainnya",
     "Prasarana Air Baku Kawasan Metropolitan, Kawasan Perkotaan, dan Kawasan Strategis": "Air Baku (Kawasan Strategis)",
 
     # --- Ditjen Bina Marga ---
     "Dukungan Penanganan Jembatan Daerah": "Jembatan Daerah",
     "Penanganan Bencana dan Longsoran": "Jalan",
-    "Layanan Perencanaan dan Pengawasan Teknik": "Lainnya",
-    "Layanan Penyiapan dan Pengendalian Pelaksanaan": "Lainnya",
-    "Layanan Perencanaan dan Pengawasan Teknik (Jalan Daerah)": "Lainnya",
 
     # --- Ditjen Cipta Karya ---
     "Optimalisasi dan Rehabilitasi Sistem Pengelolaan Persampahan Skala Regional/Kota/Kawasan": "TPA",
@@ -146,11 +164,6 @@ RO_TO_KATEGORI_RAW = {
     "Optimalisasi dan Rehabilitasi SPAM": "SPAM",
     "Optimalisasi dan Rehabilitasi Sistem Pengelolaan Air Limbah Domestik Setempat": "SPALD-S",
     "Pembangunan dan Rehabilitasi Bangunan Gedung Negara": "Gedung Pemerintahan",
-    "Pengendalian Pelaksanaan, Kinerja Program dan Koordinasi Pengadaan Tanah Pembangunan Infrastruktur Cipta Karya": "Lainnya",
-    "Peningkatan Kapasitas Koordinator Pengelola Teknis dan Pengelola Teknis": "Lainnya",
-    "Pembinaan dan Pengawasan Penyelenggaran SPAM": "Lainnya",
-    "Pengendalian dan Pengawasan Penyelenggaraan Sanitasi": "Lainnya",
-    "Pembinaan dan Pengawasan Penyelenggaraan Kawasan Strategis": "Lainnya",
 
     # --- Ditjen Prasarana Strategis ---
     "Pembangunan, Rehabilitasi, dan Renovasi Sarana Prasarana Strategis Lainnya": "Sarana Strategis Lainnya",
@@ -171,13 +184,14 @@ def auto_categorize(rincian_output):
     """Kategorikan berdasarkan teks kolom 'Rincian Output', bukan 'Nama Paket'.
 
     Pencocokan exact-match (setelah dinormalisasi) terhadap tabel RO -> Kategori
-    dari 'Klasifikasi_Infrastruktur.xlsx'. RO yang tidak dikenali (mis. RO baru
-    yang belum ada di tabel klasifikasi) jatuh ke 'Lainnya'.
+    dari 'Klasifikasi_Infrastruktur.xlsx'. RO yang tidak dikenali (tidak ada di
+    tabel klasifikasi) mengembalikan None, sehingga baris tersebut nantinya
+    dibuang dan tidak ditampilkan di dashboard (lihat load_data).
     """
     key = _normalize_text(rincian_output)
     if not key:
-        return "Lainnya"
-    return RO_TO_KATEGORI.get(key, "Lainnya")
+        return None
+    return RO_TO_KATEGORI.get(key, None)
 
 
 # =========================================================
@@ -216,7 +230,6 @@ CLUSTER_MAP = {
     'Sarana Peribadatan': 'Rumah Hunian & Fasilitas Umum',
     'Fasilitas Kesehatan': 'Rumah Hunian & Fasilitas Umum',
     'Pondok Pesantren': 'Rumah Hunian & Fasilitas Umum',
-    'Huntara': 'Rumah Hunian & Fasilitas Umum',
 }
 
 CLUSTER_COLOR_MAP = {
@@ -225,7 +238,6 @@ CLUSTER_COLOR_MAP = {
     'Sanitasi & Persampahan': '#f2b705',
     'Irigasi, Rawa, & Sungai': '#1e40af',
     'Rumah Hunian & Fasilitas Umum': '#b8860b',
-    'Lainnya': '#94a3b8',
 }
 
 CLUSTER_ORDER = list(CLUSTER_COLOR_MAP.keys())
@@ -236,7 +248,6 @@ CLUSTER_ICON = {
     'Sanitasi & Persampahan': '🗑️',
     'Irigasi, Rawa, & Sungai': '🌾',
     'Rumah Hunian & Fasilitas Umum': '🏠',
-    'Lainnya': '📦',
 }
 
 # Item yang ditampilkan pada tiap kartu infografis, per cluster.
@@ -272,7 +283,6 @@ CLUSTER_ITEMS = {
         ("🕌", "Sarana Peribadatan", "Sarana Peribadatan"),
         ("🏥", "Fasilitas Kesehatan", "Fasilitas Kesehatan"),
         ("📖", "Pondok Pesantren", "Pondok Pesantren"),
-        ("🏕️", "Huntara", "Huntara"),
     ],
 }
 
@@ -286,7 +296,52 @@ CLUSTER_DISPLAY_ORDER = [
 
 
 def map_to_cluster(kategori):
-    return CLUSTER_MAP.get(kategori, "Lainnya")
+    if kategori is None:
+        return None
+    return CLUSTER_MAP.get(kategori, None)
+
+
+# =========================================================
+# MAPPING SATUAN PER JENIS KEGIATAN (KATEGORI)
+# Kolom "Satuan" pada sheet 'Daftar Paket' sering ditulis tidak konsisten
+# antar baris walau jenis pekerjaannya sama (mis. "Ha" vs "ha" vs
+# "Hektar", atau "unit" vs "Unit"). Supaya rekap volume & label satuan
+# yang ditampilkan konsisten, satuan tampilan ditentukan dari KATEGORI
+# (Jenis Kegiatan), bukan diambil apa adanya dari kolom "Satuan" tiap
+# baris. Sesuaikan nilai di bawah ini bila satuan baku per kategori pada
+# data Anda berbeda dari asumsi berikut.
+# =========================================================
+
+SATUAN_MAP = {
+    "Jaringan Irigasi": "Unit",
+    "Sungai dan Muara": "Kilometer",
+    "Bendung": "Unit",
+    "JIAT": "Kilometer",
+    "Sumur": "Unit",
+    "Sabodam": "Unit",
+    "Air Baku (3T)": "Kilometer",
+    "Air Baku (Kawasan Strategis)": "Kilometer",
+    "Jalan": "Kilometer",
+    "Jembatan Daerah": "Meter",
+    "TPA": "Unit",
+    "Kawasan": "Hektar",
+    "SPAM": "Unit",
+    "SPALD-S": "Unit",
+    "Gedung Pemerintahan": "Unit",
+    "Sarana Strategis Lainnya": "Unit",
+    "Madrasah": "Unit",
+    "Sarana Peribadatan": "Unit",
+    "Fasilitas Kesehatan": "Unit",
+    "Pondok Pesantren": "Unit",
+}
+
+
+def get_satuan_for_kategori(kategori_name: str) -> str:
+    """Satuan baku untuk sebuah kategori (Jenis Kegiatan), dipakai untuk
+    menyeragamkan label satuan yang ditampilkan walau isi kolom "Satuan"
+    pada data mentah berbeda-beda tiap baris. Fallback ke 'Unit' bila
+    kategori belum terdaftar di SATUAN_MAP."""
+    return SATUAN_MAP.get(kategori_name, "Unit")
 
 
 # =========================================================
@@ -348,11 +403,17 @@ def load_data(file_source):
         df_paket["Jenis Kegiatan"] = df_paket[ro_col].apply(auto_categorize)
     else:
         # Kolom "Rincian Output" tidak ditemukan di data yang diunggah —
-        # semua baris masuk "Lainnya" supaya tetap kelihatan,
-        # bukan diam-diam salah kategori.
-        df_paket["Jenis Kegiatan"] = "Lainnya"
+        # tidak ada baris yang bisa dipetakan ke kategori manapun.
+        df_paket["Jenis Kegiatan"] = None
 
     df_paket["Cluster"] = df_paket["Jenis Kegiatan"].apply(map_to_cluster)
+
+    # Baris yang RO-nya tidak dikenali di tabel klasifikasi (Jenis Kegiatan
+    # dan/atau Cluster kosong) dibuang sepenuhnya, tidak ditampilkan sebagai
+    # "Lainnya" ataupun kategori lain.
+    df_paket = df_paket[
+        df_paket["Jenis Kegiatan"].notna() & df_paket["Cluster"].notna()
+    ].reset_index(drop=True)
 
     return df_ro, df_paket
 
@@ -472,10 +533,10 @@ def render_rincian_item(df_items: pd.DataFrame, level_label: str, level_name: st
     styled_dataframe(
         df_item_display,
         {
-            "Pagu (Rp ribu)": "{:,.0f}".format,
-            "Realisasi (Rp ribu)": "{:,.0f}".format,
-            "Real. Keu (%)": "{:.2f}%".format,
-            "Real. Fis (%)": "{:.2f}%".format,
+            "Pagu (Rp ribu)": fmt_num,
+            "Realisasi (Rp ribu)": fmt_num,
+            "Real. Keu (%)": fmt_percent,
+            "Real. Fis (%)": fmt_percent,
         },
         key=f"df_{sort_key}",
     )
@@ -1164,7 +1225,7 @@ total_paket = len(df_filtered)
 
 
 def rupiah_miliar(value):
-    return f"Rp {value / 1e9:,.2f} M"
+    return f"Rp {fmt_num(value / 1e9)} M"
 
 
 m1, m2, m3, m4 = st.columns(4)
@@ -1189,7 +1250,7 @@ with m2:
             <div class="metric-icon" style="background:#e8f8f1;">📈</div>
         </div>
         <div class="metric-value">{rupiah_miliar(total_realisasi)}</div>
-        <div class="metric-sub" style="color:#10a66a;">▲ {avg_real_keu:.2f}% penyerapan</div>
+        <div class="metric-sub" style="color:#10a66a;">▲ {fmt_percent(avg_real_keu)} penyerapan</div>
     </div>
     """)
 
@@ -1200,7 +1261,7 @@ with m3:
             <div class="metric-title">Progress Fisik</div>
             <div class="metric-icon" style="background:#fff5df;">🏗️</div>
         </div>
-        <div class="metric-value">{avg_real_fisik:.2f}%</div>
+        <div class="metric-value">{fmt_percent(avg_real_fisik)}</div>
         <div class="metric-sub">Rata-rata kemajuan pekerjaan</div>
     </div>
     """)
@@ -1318,7 +1379,7 @@ with progress_col1:
         st.progress(min(max(avg_real_keu / 100, 0), 1))
         html(f"""
         <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:0.8rem;color:#64748b;">
-            <span>Realisasi</span><b>{avg_real_keu:.2f}%</b>
+            <span>Realisasi</span><b>{fmt_percent(avg_real_keu)}</b>
         </div>
         """)
 
@@ -1328,7 +1389,7 @@ with progress_col2:
         st.progress(min(max(avg_real_fisik / 100, 0), 1))
         html(f"""
         <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:0.8rem;color:#64748b;">
-            <span>Kemajuan pekerjaan</span><b>{avg_real_fisik:.2f}%</b>
+            <span>Kemajuan pekerjaan</span><b>{fmt_percent(avg_real_fisik)}</b>
         </div>
         """)
 
@@ -1353,8 +1414,8 @@ def get_cat_summary(kategori_name):
     if vol_col_info and vol_col_info in df_sub.columns:
         vol_sum = pd.to_numeric(df_sub[vol_col_info], errors='coerce').fillna(0).sum()
         if vol_sum > 0:
-            satuan = df_sub[satuan_col_info].dropna().iloc[0] if (satuan_col_info and not df_sub[satuan_col_info].dropna().empty) else "Unit"
-            return f"{vol_sum:,.0f} {satuan}".strip()
+            satuan = get_satuan_for_kategori(kategori_name)
+            return f"{fmt_num(vol_sum)} {satuan}".strip()
     return f"{paket_cnt} Paket"
 
 
@@ -1397,7 +1458,10 @@ with info_col2:
 
 
 # =========================================================
-# ANALISIS & PENGELOMPOKAN KATEGORI (GROUP BY UNOR, PROVINSI, KATEGORI & SATUAN)
+# ANALISIS & PENGELOMPOKAN KATEGORI (GROUP BY UNOR, PROVINSI, KATEGORI)
+# Satuan volume ditampilkan berdasarkan SATUAN_MAP (per kategori), bukan
+# dari kolom "Satuan" mentah, karena penulisannya tidak konsisten antar
+# baris di Excel walaupun jenis pekerjaannya sama.
 # =========================================================
 
 html('<div class="section-title">🏷️ Analisis & Pengelompokan Kategori Paket</div>')
@@ -1407,7 +1471,7 @@ vol_col = find_col_by_keywords(df_filtered, ["vol", "volume", "panjang", "jumlah
 satuan_col = find_col_by_keywords(df_filtered, ["satuan", "unit"])
 
 df_filtered_kat = df_filtered.copy()
-if vol_col and satuan_col:
+if vol_col:
     df_filtered_kat[vol_col] = pd.to_numeric(df_filtered_kat[vol_col], errors='coerce').fillna(0)
 
 category_card.markdown("""
@@ -1415,16 +1479,19 @@ category_card.markdown("""
     Rekapitulasi Paket & Volume Output Berdasarkan Unit Organisasi, Provinsi & Kategori
 </div>
 <div style="font-size:0.75rem; color:#64748b; margin-bottom:14px;">
-    Tabel dikelompokkan berdasarkan <b>Unit Organisasi</b>, <b>Provinsi</b>, <b>Jenis Kegiatan (Kategori)</b>, dan dipecah terpisah per <b>Satuan Volume</b>.
+    Tabel dikelompokkan berdasarkan <b>Unit Organisasi</b>, <b>Provinsi</b>, dan <b>Jenis Kegiatan (Kategori)</b>.
+    Satuan volume mengikuti satuan baku tiap kategori (lihat <code>SATUAN_MAP</code>), bukan kolom "Satuan" mentah.
 </div>
 """, unsafe_allow_html=True)
 
-# Group By dengan Unit Organisasi & Provinsi di Paling Depan
+# Group By dengan Unit Organisasi & Provinsi di Paling Depan.
+# Kolom "Satuan" mentah TIDAK dipakai sebagai kunci group by karena
+# penulisannya di data sering tidak konsisten antar baris untuk kategori
+# yang sama -- label satuan yang ditampilkan diambil dari SATUAN_MAP
+# berdasarkan "Jenis Kegiatan".
 custom_group = ["Unit Organisasi", "Provinsi", "Jenis Kegiatan"]
-if satuan_col:
-    custom_group.append(satuan_col)
 
-if vol_col and satuan_col:
+if vol_col:
     df_grouped_unor = df_filtered_kat.groupby(custom_group).agg(
         **{
             "Total Volume": (vol_col, "sum"),
@@ -1434,7 +1501,8 @@ if vol_col and satuan_col:
     ).reset_index()
 
     df_grouped_unor["Volume Output"] = df_grouped_unor.apply(
-        lambda r: f"{r['Total Volume']:,.2f} {r[satuan_col]}".rstrip('0').rstrip('.'), axis=1
+        lambda r: f"{fmt_num(r['Total Volume'])} {get_satuan_for_kategori(r['Jenis Kegiatan'])}",
+        axis=1,
     )
 
     df_display_unor = df_grouped_unor[
@@ -1475,7 +1543,7 @@ for tab, abbr in zip(kat_unor_tabs, UNOR_ORDER):
             st.info(f"Tidak ada data untuk unit organisasi {UNOR_FULLNAME.get(abbr, abbr)} pada filter saat ini.")
         else:
             st.dataframe(
-                df_kat_unor_sub.style.format({"Total Pagu (Rp ribu)": "Rp {:,.0f}"}),
+                df_kat_unor_sub.style.format({"Total Pagu (Rp ribu)": fmt_rupiah}),
                 use_container_width=True,
                 hide_index=True,
             )
@@ -1487,7 +1555,7 @@ if other_abbrs_kat:
             with tab:
                 df_kat_unor_sub = df_display_unor[df_display_unor["_unor_abbr"] == abbr].drop(columns=["_unor_abbr", "Unit Organisasi"])
                 st.dataframe(
-                    df_kat_unor_sub.style.format({"Total Pagu (Rp ribu)": "Rp {:,.0f}"}),
+                    df_kat_unor_sub.style.format({"Total Pagu (Rp ribu)": fmt_rupiah}),
                     use_container_width=True,
                     hide_index=True,
                 )
@@ -1518,12 +1586,12 @@ if kat_list:
     })
 
     detail_fmt = {
-        "Pagu (Rp ribu)": "{:,.0f}",
-        "Realisasi (Rp ribu)": "{:,.0f}",
-        "Real. Fis (%)": "{:.2f}%",
+        "Pagu (Rp ribu)": fmt_num,
+        "Realisasi (Rp ribu)": fmt_num,
+        "Real. Fis (%)": fmt_percent,
     }
     if vol_col and vol_col in df_kat_detail.columns:
-        detail_fmt[vol_col] = "{:,.2f}"
+        detail_fmt[vol_col] = fmt_num
 
     category_card.dataframe(
         df_kat_detail.style.format(detail_fmt),
@@ -1571,10 +1639,10 @@ with st.container(border=True):
         styled_dataframe(
             df_prov_summary,
             {
-                "Pagu (Rp ribu)": "{:,.0f}",
-                "Realisasi (Rp ribu)": "{:,.0f}",
-                "Real. Keu (%)": "{:.2f}%",
-                "Real. Fis (%)": "{:.2f}%",
+                "Pagu (Rp ribu)": fmt_num,
+                "Realisasi (Rp ribu)": fmt_num,
+                "Real. Keu (%)": fmt_percent,
+                "Real. Fis (%)": fmt_percent,
             },
             key="df_prov_summary",
         )
@@ -1641,10 +1709,10 @@ with st.container(border=True):
                 styled_dataframe(
                     df_kab_summary,
                     {
-                        "Pagu (Rp ribu)": "{:,.0f}",
-                        "Realisasi (Rp ribu)": "{:,.0f}",
-                        "Real. Keu (%)": "{:.2f}%",
-                        "Real. Fis (%)": "{:.2f}%",
+                        "Pagu (Rp ribu)": fmt_num,
+                        "Realisasi (Rp ribu)": fmt_num,
+                        "Real. Keu (%)": fmt_percent,
+                        "Real. Fis (%)": fmt_percent,
                     },
                     key=f"df_kab_summary_{prov}",
                 )
@@ -1797,9 +1865,9 @@ for tab, abbr in zip(unor_tabs, UNOR_ORDER):
 
             st.dataframe(
                 top10_display_unor.style.format({
-                    "Pagu (Rp)": "Rp {:,.0f}",
-                    "Realisasi (Rp)": "Rp {:,.0f}",
-                    "Real. Fis (%)": "{:.2f}%",
+                    "Pagu (Rp)": fmt_rupiah,
+                    "Realisasi (Rp)": fmt_rupiah,
+                    "Real. Fis (%)": fmt_percent,
                 }),
                 use_container_width=True,
                 hide_index=True,
@@ -1822,9 +1890,9 @@ if other_abbrs:
                 st.dataframe(
                     top10_unor[["Nama Paket", "Provinsi", "Pagu (Rp)", "Realisasi (Rp)", "Real. Fis (%)"]]
                     .style.format({
-                        "Pagu (Rp)": "Rp {:,.0f}",
-                        "Realisasi (Rp)": "Rp {:,.0f}",
-                        "Real. Fis (%)": "{:.2f}%",
+                        "Pagu (Rp)": fmt_rupiah,
+                        "Realisasi (Rp)": fmt_rupiah,
+                        "Real. Fis (%)": fmt_percent,
                     }),
                     use_container_width=True,
                     hide_index=True,
