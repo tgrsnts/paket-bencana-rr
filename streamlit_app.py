@@ -230,7 +230,6 @@ CLUSTER_MAP = {
     # Sanitasi & Persampahan
     'TPA': 'Sanitasi & Persampahan',
     'SPALD-S': 'Sanitasi & Persampahan',
-    'IPLT': 'Sanitasi & Persampahan',
 
     # Rumah Hunian & Fasilitas Umum
     'Kawasan': 'Rumah Hunian & Fasilitas Umum',
@@ -277,7 +276,6 @@ CLUSTER_ITEMS = {
     'Sanitasi & Persampahan': [
         ("🚛", "TPA", "TPA"),
         ("🚽", "SPALD-S", "SPALD-S"),
-        ("🧻", "IPLT", "IPLT"),
     ],
     'Irigasi, Rawa, & Sungai': [
         ("🌾", "Jaringan Irigasi", "Jaringan Irigasi"),
