@@ -104,6 +104,16 @@ def fmt_rupiah(value, decimals: int = 2, prefix: str = "Rp "):
     return f"{prefix}{fmt_num(value, decimals)}"
 
 
+def fmt_num_id(value, decimals: int = 2):
+    """Sama seperti fmt_num, tapi memakai format angka Indonesia:
+    '.' sebagai pemisah ribuan dan ',' sebagai pemisah desimal
+    (mis. 1.234,50 bukan 1,234.50)."""
+    s = fmt_num(value, decimals)
+    if not isinstance(s, str):
+        return s
+    return s.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 def styled_dataframe(df, format_map, key=None):
     """Render dataframe dengan st.dataframe (native Streamlit table) + formatting."""
     st.dataframe(
@@ -313,7 +323,7 @@ def map_to_cluster(kategori):
 # =========================================================
 
 SATUAN_MAP = {
-    "Jaringan Irigasi": "Unit",
+    "Jaringan Irigasi": "Kilometer",
     "Sungai dan Muara": "Kilometer",
     "Bendung": "Unit",
     "JIAT": "Kilometer",
@@ -1415,7 +1425,7 @@ def get_cat_summary(kategori_name):
         vol_sum = pd.to_numeric(df_sub[vol_col_info], errors='coerce').fillna(0).sum()
         if vol_sum > 0:
             satuan = get_satuan_for_kategori(kategori_name)
-            return f"{fmt_num(vol_sum)} {satuan}".strip()
+            return f"{fmt_num_id(vol_sum)} {satuan}".strip()
     return f"{paket_cnt} Paket"
 
 
