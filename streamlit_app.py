@@ -44,6 +44,13 @@ def to_roman(n: int) -> str:
     return result
 
 
+def _normalize_text(s) -> str:
+    """Normalisasi teks untuk pencocokan: strip, lower, & rapikan spasi ganda."""
+    if not isinstance(s, str):
+        return ""
+    return re.sub(r"\s+", " ", s.strip()).lower()
+
+
 # =========================================================
 # SINGKATAN UNIT ORGANISASI (BM / CK / SDA / PS)
 # =========================================================
@@ -97,78 +104,80 @@ LOGO_B64 = get_logo_base64(LOGO_PATH)
 
 
 # =========================================================
-# ATURAN MAPPING KATEGORI (KEYWORD MAPPER)
-# Nama kategori & pengelompokan cluster mengikuti
-# "Klasifikasi_Infrastruktur.xlsx": kolom C = nama kategori,
-# kolom D = cluster tempatnya.
+# PEMETAAN "RINCIAN OUTPUT" -> KATEGORI -> CLUSTER
+# Sumber: "Klasifikasi_Infrastruktur.xlsx" (Sheet2)
+#   Kolom A = Unit Organisasi
+#   Kolom B = Rincian Output (RO)   <-- kunci pemetaan
+#   Kolom C = Kategori
+#   Kolom D = Cluster
+#
+# Baris yang Kategorinya kosong di Excel (kolom C = NaN) adalah RO
+# yang BUKAN pekerjaan konstruksi fisik (layanan, dokumen teknis,
+# pembinaan & pengawasan, pengadaan tanah, dsb) -> tetap dipetakan
+# eksplisit ke "Lainnya" supaya jelas datanya dikenali,
+# bukan sekadar jatuh ke fallback.
 # =========================================================
 
-MAPPING_RULES = {
-    # --- Air Baku & Air Bersih ---
-    'JIAT': ['jiat', 'jaringan irigasi air tanah'],
-    'Air Baku (3T)': ['air baku (3t)', 'air baku 3t', 'daerah terpencil', 'kawasan sulit air'],
-    'Air Baku (Kawasan Strategis)': ['air baku kawasan', 'air baku (kawasan'],
-    'SPAM': ['spam'],
-    'Sumur': ['sumur bor', 'sumur air', 'sumur'],
+RO_TO_KATEGORI_RAW = {
+    # --- Ditjen Sumber Daya Air ---
+    "Jaringan Irigasi di Sentra Produksi Lumbung Pangan": "Jaringan Irigasi",
+    "Prasarana Pengendalian Banjir di Kawasan Strategis Ekonomi, Kawasan Perkotaan, 3T, dan Daerah Berisiko Tinggi dari Daya Rusak Air": "Sungai dan Muara",
+    "Bendung Irigasi": "Bendung",
+    "JIAT untuk Mendukung Swasembada Pangan": "JIAT",
+    "Sumur Air Tanah pada Kawasan Sulit Air, Bencana Kekeringan, dan Terpencil (3T)": "Sumur",
+    "Prasarana Pengendali Lahar/Sedimen": "Sabodam",
+    "Bidang Tanah untuk Infrastruktur Sumber Daya Air": "Lainnya",
+    "Layanan Teknis Pelaksanaan Pengelolaan Sumber Daya Air": "Lainnya",
+    "Dokumen Pengembangan dan Perekayasaan Balai Teknik/Balai": "Lainnya",
+    "Prasarana Air Baku Kawasan Sulit Air, Bencana Kekeringan, dan Kawasan Terpencil (3T)": "Air Baku (3T)",
+    "Dokumen Teknis Bidang Sungai dan Pantai": "Lainnya",
+    "Prasarana Air Baku Kawasan Metropolitan, Kawasan Perkotaan, dan Kawasan Strategis": "Air Baku (Kawasan Strategis)",
 
-    # --- Irigasi, Rawa, & Sungai ---
-    'Bendung': ['bendung'],
-    'Sabodam': ['sabodam', 'lahar', 'sedimen'],
-    'Jaringan Irigasi': ['irigasi', 'd.i.', 'd.i '],
-    'Sungai dan Muara': ['banjir', 'sungai', 'normalisasi', 'muara'],
+    # --- Ditjen Bina Marga ---
+    "Dukungan Penanganan Jembatan Daerah": "Jembatan Daerah",
+    "Penanganan Bencana dan Longsoran": "Jalan",
+    "Layanan Perencanaan dan Pengawasan Teknik": "Lainnya",
+    "Layanan Penyiapan dan Pengendalian Pelaksanaan": "Lainnya",
+    "Layanan Perencanaan dan Pengawasan Teknik (Jalan Daerah)": "Lainnya",
 
-    # --- Konektivitas ---
-    'Jalan': ['jalan'],
-    'Jembatan Daerah': ['jembatan'],
+    # --- Ditjen Cipta Karya ---
+    "Optimalisasi dan Rehabilitasi Sistem Pengelolaan Persampahan Skala Regional/Kota/Kawasan": "TPA",
+    "Pengembangan Kawasan Strategis dan Prioritas Nasional": "Kawasan",
+    "Optimalisasi dan Rehabilitasi SPAM": "SPAM",
+    "Optimalisasi dan Rehabilitasi Sistem Pengelolaan Air Limbah Domestik Setempat": "SPALD-S",
+    "Pembangunan dan Rehabilitasi Bangunan Gedung Negara": "Gedung Pemerintahan",
+    "Pengendalian Pelaksanaan, Kinerja Program dan Koordinasi Pengadaan Tanah Pembangunan Infrastruktur Cipta Karya": "Lainnya",
+    "Peningkatan Kapasitas Koordinator Pengelola Teknis dan Pengelola Teknis": "Lainnya",
+    "Pembinaan dan Pengawasan Penyelenggaran SPAM": "Lainnya",
+    "Pengendalian dan Pengawasan Penyelenggaraan Sanitasi": "Lainnya",
+    "Pembinaan dan Pengawasan Penyelenggaraan Kawasan Strategis": "Lainnya",
 
-    # --- Sanitasi & Persampahan ---
-    'TPA': ['tpa'],
-    'SPALD-S': ['spald', 'limbah domestik', 'air limbah'],
-    'IPLT': ['iplt'],
-
-    # --- Rumah Hunian & Fasilitas Umum ---
-    'Huntara': ['huntara', 'rumah hunian'],
-    'Kawasan': ['kawasan strategis', 'kawasan perkotaan', 'kawasan permukiman'],
-    'Gedung Pemerintahan': ['gedung negara', 'gedung pemerintahan'],
-    'Fasilitas Kesehatan': ['kesehatan', 'rsud', 'puskesmas'],
-    'Sarana Peribadatan': ['peribadatan', 'masjid', 'gereja'],
-    'Pondok Pesantren': ['ponpes', 'pesantren'],
-    'Madrasah': ['madrasah', 'man', 'mts', 'min'],
-    'Sarana Strategis Lainnya': ['sarana strategis lainnya'],
+    # --- Ditjen Prasarana Strategis ---
+    "Pembangunan, Rehabilitasi, dan Renovasi Sarana Prasarana Strategis Lainnya": "Sarana Strategis Lainnya",
+    "Revitalisasi Sarana Prasarana Madrasah": "Madrasah",
+    "Pembangunan, Rehabilitasi, dan Renovasi Sarana Prasarana Peribadatan": "Sarana Peribadatan",
+    "Pembangunan, Rehabilitasi, dan Renovasi Sarana Prasarana Kesehatan": "Fasilitas Kesehatan",
+    "Peningkatan Bangunan Pondok Pesantren": "Pondok Pesantren",
 }
 
-# Urutan pengecekan keyword: kategori yang lebih spesifik harus dicek
-# lebih dulu supaya tidak "tertelan" oleh kategori yang lebih umum
-# (mis. paket JIAT mengandung kata "irigasi" tapi harus masuk Air Baku,
-# bukan Jaringan Irigasi).
-_CATEGORY_CHECK_ORDER = [
-    'JIAT', 'Air Baku (Kawasan Strategis)', 'Air Baku (3T)', 'SPAM', 'Sumur',
-    'Bendung', 'Sabodam', 'Sungai dan Muara', 'Jaringan Irigasi',
-    'Jalan', 'Jembatan Daerah',
-    'TPA', 'SPALD-S', 'IPLT',
-    'Huntara', 'Kawasan', 'Gedung Pemerintahan',
-    'Fasilitas Kesehatan', 'Sarana Peribadatan', 'Pondok Pesantren', 'Madrasah',
-    'Sarana Strategis Lainnya',
-]
+# Dict final untuk lookup: key dinormalisasi (lower + spasi rapi)
+# supaya tahan terhadap perbedaan kapitalisasi/spasi di data "Daftar Paket".
+RO_TO_KATEGORI = {
+    _normalize_text(ro): kategori for ro, kategori in RO_TO_KATEGORI_RAW.items()
+}
 
 
-def auto_categorize(nama_paket):
-    if not isinstance(nama_paket, str):
-        return "Lainnya / Cek Manual"
+def auto_categorize(rincian_output):
+    """Kategorikan berdasarkan teks kolom 'Rincian Output', bukan 'Nama Paket'.
 
-    nama_lower = nama_paket.lower()
-    for kategori in _CATEGORY_CHECK_ORDER:
-        keywords = MAPPING_RULES.get(kategori, [])
-        if any(kw in nama_lower for kw in keywords):
-            return kategori
-    return "Lainnya / Cek Manual"
-
-
-# Kategori yang dianggap BUKAN pekerjaan konstruksi fisik
-# (layanan, dokumen teknis, pembinaan & pengawasan, dsb).
-# Baris dengan Kategori ini bisa disembunyikan lewat toggle
-# "Hanya tampilkan pekerjaan konstruksi" di sidebar.
-NON_KONSTRUKSI_KATEGORI = {"Lainnya / Cek Manual"}
+    Pencocokan exact-match (setelah dinormalisasi) terhadap tabel RO -> Kategori
+    dari 'Klasifikasi_Infrastruktur.xlsx'. RO yang tidak dikenali (mis. RO baru
+    yang belum ada di tabel klasifikasi) jatuh ke 'Lainnya'.
+    """
+    key = _normalize_text(rincian_output)
+    if not key:
+        return "Lainnya"
+    return RO_TO_KATEGORI.get(key, "Lainnya")
 
 
 # =========================================================
@@ -287,6 +296,36 @@ def map_to_cluster(kategori):
 REQUIRED_SHEETS = ["Daftar RO", "Daftar Paket"]
 
 
+def find_rincian_output_col(df):
+    """Cari kolom 'Rincian Output' secara fleksibel di sheet 'Daftar Paket'."""
+    # 1) nama persis
+    for c in df.columns:
+        if str(c).strip().lower() == "rincian output":
+            return c
+    # 2) mengandung kata "rincian" + "output"
+    for c in df.columns:
+        cl = str(c).lower()
+        if "rincian" in cl and "output" in cl:
+            return c
+    # 3) fallback umum: kolom yang cuma mengandung "output" atau disingkat "ro"
+    for c in df.columns:
+        cl = str(c).lower().strip()
+        if cl in ("ro", "output"):
+            return c
+    return None
+
+
+def is_pekerjaan_konstruksi(value) -> bool:
+    """True jika nilai kolom 'Kategori' (bawaan sheet 'Daftar Paket') menandakan
+    pekerjaan konstruksi fisik, misalnya 'Pekerjaan Konstruksi'."""
+    text = _normalize_text(value)
+    if not text:
+        return False
+    if "non konstruksi" in text or "bukan konstruksi" in text or "non-konstruksi" in text:
+        return False
+    return "konstruksi" in text
+
+
 @st.cache_data(show_spinner="Memproses data baru...")
 def load_data(file_source):
     xls = pd.ExcelFile(file_source)
@@ -299,20 +338,21 @@ def load_data(file_source):
     df_ro = pd.read_excel(xls, sheet_name="Daftar RO")
     df_paket = pd.read_excel(xls, sheet_name="Daftar Paket")
 
-    # Cari kolom Nama Paket secara fleksibel
-    nama_col = None
-    for c in df_paket.columns:
-        if "nama" in str(c).lower() and "paket" in str(c).lower():
-            nama_col = c
-            break
+    # Kolom "Kategori" di sheet 'Daftar Paket' adalah kolom BAWAAN dari data
+    # (mis. menandai "Pekerjaan Konstruksi" vs jenis lain) — TIDAK ditimpa.
+    # Klasifikasi kita sendiri, berdasarkan "Rincian Output" dan tabel
+    # "Klasifikasi_Infrastruktur.xlsx", disimpan di kolom baru "Jenis Kegiatan"
+    # supaya dua-duanya tetap kelihatan dan tidak saling bentrok.
+    ro_col = find_rincian_output_col(df_paket)
+    if ro_col is not None:
+        df_paket["Jenis Kegiatan"] = df_paket[ro_col].apply(auto_categorize)
+    else:
+        # Kolom "Rincian Output" tidak ditemukan di data yang diunggah —
+        # semua baris masuk "Lainnya" supaya tetap kelihatan,
+        # bukan diam-diam salah kategori.
+        df_paket["Jenis Kegiatan"] = "Lainnya"
 
-    if nama_col:
-        df_paket["Kategori"] = df_paket[nama_col].apply(auto_categorize)
-    elif "Nama Paket" in df_paket.columns:
-        df_paket["Kategori"] = df_paket["Nama Paket"].apply(auto_categorize)
-
-    if "Kategori" in df_paket.columns:
-        df_paket["Cluster"] = df_paket["Kategori"].apply(map_to_cluster)
+    df_paket["Cluster"] = df_paket["Jenis Kegiatan"].apply(map_to_cluster)
 
     return df_ro, df_paket
 
@@ -947,7 +987,8 @@ with st.sidebar:
         label_visibility="collapsed",
         help=(
             "File harus punya sheet 'Daftar RO' dan 'Daftar Paket' "
-            "dengan format kolom yang sama seperti data awal."
+            "dengan format kolom yang sama seperti data awal (termasuk kolom "
+            "'Rincian Output' pada sheet 'Daftar Paket')."
         ),
     )
 
@@ -977,20 +1018,13 @@ with st.sidebar:
     html("</div>")
 
     if data_ok:
-        html('<div class="sidebar-filters">')
-        html('<div class="filter-title">🏗️&nbsp; Jenis Data</div>')
-        only_konstruksi = st.checkbox(
-            "Hanya pekerjaan konstruksi",
-            value=True,
-            help=(
-                "Saat aktif, baris berkategori 'Lainnya / Cek Manual' "
-                "(layanan, dokumen teknis, pembinaan & pengawasan, dsb — bukan pekerjaan fisik konstruksi) "
-                "disembunyikan dari seluruh dashboard."
-            ),
-        )
-        if only_konstruksi:
-            df_paket = df_paket[~df_paket["Kategori"].isin(NON_KONSTRUKSI_KATEGORI)].reset_index(drop=True)
-        html("</div>")
+        # Dashboard hanya menampilkan pekerjaan konstruksi fisik secara default,
+        # berdasarkan kolom "Kategori" BAWAAN pada sheet 'Daftar Paket'
+        # (mis. bernilai "Pekerjaan Konstruksi") — tanpa perlu toggle.
+        if "Kategori" in df_paket.columns:
+            df_paket = df_paket[
+                df_paket["Kategori"].apply(is_pekerjaan_konstruksi)
+            ].reset_index(drop=True)
 
         LOKASI_COL = find_lokasi_col(df_paket)
         if LOKASI_COL is not None:
@@ -1039,10 +1073,10 @@ with st.sidebar:
 
         html('<div class="filter-title">🧱&nbsp; Kategori Pekerjaan</div>')
         kategori_options = ["Semua"] + sorted(
-            df_paket["Kategori"].dropna().astype(str).unique().tolist()
+            df_paket["Jenis Kegiatan"].dropna().astype(str).unique().tolist()
         )
         selected_kategori = st.selectbox(
-            "Kategori", kategori_options, label_visibility="collapsed"
+            "Jenis Kegiatan", kategori_options, label_visibility="collapsed"
         )
 
         html('<div class="filter-title">🌪️&nbsp; Jenis Bencana</div>')
@@ -1099,7 +1133,7 @@ if LOKASI_COL is not None and selected_kab != "Semua":
     df_filtered = df_filtered[df_filtered["_lokasi_clean"] == selected_kab]
 
 if selected_kategori != "Semua":
-    df_filtered = df_filtered[df_filtered["Kategori"] == selected_kategori]
+    df_filtered = df_filtered[df_filtered["Jenis Kegiatan"] == selected_kategori]
 
 if selected_bencana != "Semua":
     df_filtered = df_filtered[df_filtered["Jenis Bencana"] == selected_bencana]
@@ -1235,7 +1269,7 @@ with col_left:
 
 with col_right:
     with st.container(border=True):
-        html('<b>Kategori Pekerjaan</b>')
+        html('<b>Kategori Pekerjaan Konstruksi</b>')
 
         df_cluster_agg = (
             df_filtered["Cluster"]
@@ -1312,7 +1346,7 @@ satuan_col_info = find_col_by_keywords(df_filtered, ["satuan", "unit"])
 
 
 def get_cat_summary(kategori_name):
-    df_sub = df_filtered[df_filtered["Kategori"] == kategori_name]
+    df_sub = df_filtered[df_filtered["Jenis Kegiatan"] == kategori_name]
     paket_cnt = len(df_sub)
     if paket_cnt == 0:
         return "0 Paket"
@@ -1386,7 +1420,7 @@ category_card.markdown("""
 """, unsafe_allow_html=True)
 
 # Group By dengan Unit Organisasi & Provinsi di Paling Depan
-custom_group = ["Unit Organisasi", "Provinsi", "Kategori"]
+custom_group = ["Unit Organisasi", "Provinsi", "Jenis Kegiatan"]
 if satuan_col:
     custom_group.append(satuan_col)
 
@@ -1404,16 +1438,15 @@ if vol_col and satuan_col:
     )
 
     df_display_unor = df_grouped_unor[
-        ["Unit Organisasi", "Provinsi", "Kategori", "Volume Output", "Jumlah Paket", "Total Pagu (Rp ribu)"]
-    ].rename(columns={"Kategori": "Jenis Kegiatan"})
+        ["Unit Organisasi", "Provinsi", "Jenis Kegiatan", "Volume Output", "Jumlah Paket", "Total Pagu (Rp ribu)"]
+    ]
 else:
-    df_grouped_unor = df_filtered_kat.groupby(["Unit Organisasi", "Provinsi", "Kategori"]).agg(
+    df_display_unor = df_filtered_kat.groupby(["Unit Organisasi", "Provinsi", "Jenis Kegiatan"]).agg(
         **{
             "Jumlah Paket": ("Nama Paket", "count"),
             "Total Pagu (Rp ribu)": ("Pagu (paket) (Rp ribu)", "sum")
         }
     ).reset_index()
-    df_display_unor = df_grouped_unor.rename(columns={"Kategori": "Jenis Kegiatan"})
 
 df_display_unor = df_display_unor.sort_values(
     ["Unit Organisasi", "Provinsi", "Jenis Kegiatan"],
@@ -1461,7 +1494,7 @@ if other_abbrs_kat:
 
 category_card.markdown('<div style="height:20px;"></div>', unsafe_allow_html=True)
 
-kat_list = sorted(df_filtered_kat["Kategori"].dropna().unique().tolist())
+kat_list = sorted(df_filtered_kat["Jenis Kegiatan"].dropna().unique().tolist())
 if kat_list:
     selected_view_kat = category_card.selectbox(
         "🔎 Pilih Kategori Pekerjaan untuk melihat rincian paket dan volumenya:",
@@ -1475,7 +1508,7 @@ if kat_list:
         show_cols.append(satuan_col)
     show_cols.extend(["Pagu (paket) (Rp ribu)", "Realisasi (paket) (Rp ribu)", "Real. Fis (%)"])
 
-    df_kat_detail = df_filtered_kat[df_filtered_kat["Kategori"] == selected_view_kat][
+    df_kat_detail = df_filtered_kat[df_filtered_kat["Jenis Kegiatan"] == selected_view_kat][
         [c for c in show_cols if c in df_filtered_kat.columns]
     ].copy()
 
