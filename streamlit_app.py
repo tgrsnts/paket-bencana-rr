@@ -1234,7 +1234,17 @@ total_paket = len(df_filtered)
 
 
 def rupiah_miliar(value):
-    return f"Rp {fmt_num(value / 1e9)} M"
+    """Format nilai Rupiah dalam satuan Miliar (M); otomatis berpindah
+    ke satuan Triliun (T) begitu nilainya sudah mencapai 1.000 M ke atas."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return value
+    if pd.isna(v):
+        return value
+    if abs(v) >= 1e12:
+        return f"Rp {fmt_num(v / 1e12)} T"
+    return f"Rp {fmt_num(v / 1e9)} M"
 
 
 m1, m2, m3, m4 = st.columns(4)
