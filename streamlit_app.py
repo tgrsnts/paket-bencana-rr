@@ -417,12 +417,12 @@ def load_data(file_source):
 
     df_paket["Cluster"] = df_paket["Jenis Kegiatan"].apply(map_to_cluster)
 
-    # Baris yang RO-nya tidak dikenali di tabel klasifikasi (Jenis Kegiatan
-    # dan/atau Cluster kosong) dibuang sepenuhnya, tidak ditampilkan sebagai
-    # "Lainnya" ataupun kategori lain.
-    df_paket = df_paket[
-        df_paket["Jenis Kegiatan"].notna() & df_paket["Cluster"].notna()
-    ].reset_index(drop=True)
+    # CATATAN: baris yang RO-nya tidak dikenali di tabel klasifikasi (Jenis
+    # Kegiatan dan/atau Cluster kosong) TIDAK dibuang di sini — semua baris
+    # data tetap dimuat. Filter "Pekerjaan Konstruksi" (Jenis Kegiatan &
+    # Cluster terisi) hanya diterapkan secara lokal pada bagian-bagian
+    # tertentu di dashboard (lihat df_filtered_konstruksi), bukan secara
+    # global terhadap seluruh data.
 
     return df_ro, df_paket
 
@@ -1088,13 +1088,13 @@ with st.sidebar:
     html("</div>")
 
     if data_ok:
-        # Dashboard hanya menampilkan pekerjaan konstruksi fisik secara default,
-        # berdasarkan kolom "Kategori" BAWAAN pada sheet 'Daftar Paket'
-        # (mis. bernilai "Pekerjaan Konstruksi") — tanpa perlu toggle.
-        if "Kategori" in df_paket.columns:
-            df_paket = df_paket[
-                df_paket["Kategori"].apply(is_pekerjaan_konstruksi)
-            ].reset_index(drop=True)
+        # Semua data dimuat apa adanya — TIDAK ada filter "Pekerjaan Konstruksi"
+        # yang diterapkan secara global di sini. Filter tersebut hanya
+        # diterapkan secara lokal pada bagian-bagian tertentu di dashboard
+        # (Donut Chart Kategori Pekerjaan Konstruksi, Ringkasan Output
+        # Infrastruktur Penanganan Bencana, dan Rekapitulasi Paket & Volume
+        # Output Berdasarkan Unit Organisasi, Provinsi & Kategori — lihat
+        # df_filtered_konstruksi).
 
         LOKASI_COL = find_lokasi_col(df_paket)
         if LOKASI_COL is not None:
@@ -1207,6 +1207,26 @@ if selected_kategori != "Semua":
 
 if selected_bencana != "Semua":
     df_filtered = df_filtered[df_filtered["Jenis Bencana"] == selected_bencana]
+
+
+# Subset khusus "Pekerjaan Konstruksi" (baik dari kolom "Kategori" bawaan
+# maupun dari klasifikasi Jenis Kegiatan/Cluster kita sendiri). df_filtered
+# di atas TETAP berisi SEMUA data (tidak difilter) dan dipakai di seluruh
+# dashboard kecuali tiga bagian berikut, yang secara eksplisit hanya
+# menampilkan pekerjaan konstruksi fisik:
+#   1. Donut Chart "Kategori Pekerjaan Konstruksi"
+#   2. Ringkasan Output Infrastruktur Penanganan Bencana
+#   3. Rekapitulasi Paket & Volume Output Berdasarkan Unit Organisasi,
+#      Provinsi & Kategori
+df_filtered_konstruksi = df_filtered.copy()
+if "Kategori" in df_filtered_konstruksi.columns:
+    df_filtered_konstruksi = df_filtered_konstruksi[
+        df_filtered_konstruksi["Kategori"].apply(is_pekerjaan_konstruksi)
+    ]
+df_filtered_konstruksi = df_filtered_konstruksi[
+    df_filtered_konstruksi["Jenis Kegiatan"].notna()
+    & df_filtered_konstruksi["Cluster"].notna()
+].reset_index(drop=True)
 
 
 # =========================================================
@@ -1352,7 +1372,7 @@ with col_right:
         html('<b>Kategori Pekerjaan Konstruksi</b>')
 
         df_cluster_agg = (
-            df_filtered["Cluster"]
+            df_filtered_konstruksi["Cluster"]
             .value_counts()
             .reindex(CLUSTER_ORDER)
             .dropna()
@@ -1421,12 +1441,12 @@ with progress_col2:
 
 html('<div class="section-title">📋 Ringkasan Output Infrastruktur Penanganan Bencana</div>')
 
-vol_col_info = find_col_by_keywords(df_filtered, ["vol", "volume", "panjang", "jumlah"])
-satuan_col_info = find_col_by_keywords(df_filtered, ["satuan", "unit"])
+vol_col_info = find_col_by_keywords(df_filtered_konstruksi, ["vol", "volume", "panjang", "jumlah"])
+satuan_col_info = find_col_by_keywords(df_filtered_konstruksi, ["satuan", "unit"])
 
 
 def get_cat_summary(kategori_name):
-    df_sub = df_filtered[df_filtered["Jenis Kegiatan"] == kategori_name]
+    df_sub = df_filtered_konstruksi[df_filtered_konstruksi["Jenis Kegiatan"] == kategori_name]
     paket_cnt = len(df_sub)
     if paket_cnt == 0:
         return "0 Paket"
@@ -1486,10 +1506,10 @@ with info_col2:
 html('<div class="section-title">🏷️ Analisis & Pengelompokan Kategori Paket</div>')
 category_card = st.container(border=True)
 
-vol_col = find_col_by_keywords(df_filtered, ["vol", "volume", "panjang", "jumlah"])
-satuan_col = find_col_by_keywords(df_filtered, ["satuan", "unit"])
+vol_col = find_col_by_keywords(df_filtered_konstruksi, ["vol", "volume", "panjang", "jumlah"])
+satuan_col = find_col_by_keywords(df_filtered_konstruksi, ["satuan", "unit"])
 
-df_filtered_kat = df_filtered.copy()
+df_filtered_kat = df_filtered_konstruksi.copy()
 if vol_col:
     df_filtered_kat[vol_col] = pd.to_numeric(df_filtered_kat[vol_col], errors='coerce').fillna(0)
 
