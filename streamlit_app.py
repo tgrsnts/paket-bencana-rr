@@ -1341,29 +1341,55 @@ with col_left:
         df_unor_agg["Unor Singkat"] = df_unor_agg["Unit Organisasi"].apply(abbreviate_unor)
         df_unor_agg["Pagu (Miliar)"] = df_unor_agg["Pagu (paket) (Rp ribu)"] / 1_000_000
         df_unor_agg["Realisasi (Miliar)"] = df_unor_agg["Realisasi (paket) (Rp ribu)"] / 1_000_000
+        df_unor_agg["Real. Keu (%)"] = (
+            df_unor_agg["Realisasi (paket) (Rp ribu)"] / df_unor_agg["Pagu (paket) (Rp ribu)"] * 100
+        ).fillna(0)
 
-        fig_bar = px.bar(
-            df_unor_agg,
-            x="Unor Singkat",
-            y=["Pagu (Miliar)", "Realisasi (Miliar)"],
-            barmode="group",
-            labels={"value": "Nilai (Miliar Rp)", "variable": "", "Unor Singkat": ""},
-            text_auto=".2f",
-            color_discrete_sequence=["#124d7c", "#f5b700"],
-            hover_data={"Unit Organisasi": True},
-        )
-        fig_bar.update_traces(textposition="outside", textfont_size=10)
+        fig_bar = go.Figure()
+
+        fig_bar.add_trace(go.Bar(
+            x=df_unor_agg["Unor Singkat"],
+            y=df_unor_agg["Pagu (Miliar)"],
+            name="Pagu (Miliar)",
+            marker_color="#124d7c",
+            text=[fmt_num(v) for v in df_unor_agg["Pagu (Miliar)"]],
+            textposition="outside",
+            textfont=dict(size=10),
+            customdata=df_unor_agg["Unit Organisasi"],
+            hovertemplate="<b>%{customdata}</b><br>Pagu: %{y:.2f} Miliar<extra></extra>",
+        ))
+
+        fig_bar.add_trace(go.Bar(
+            x=df_unor_agg["Unor Singkat"],
+            y=df_unor_agg["Realisasi (Miliar)"],
+            name="Realisasi (Miliar)",
+            marker_color="#f5b700",
+            text=[
+                f"{fmt_num(v)}<br>({fmt_percent(p)})"
+                for v, p in zip(df_unor_agg["Realisasi (Miliar)"], df_unor_agg["Real. Keu (%)"])
+            ],
+            textposition="outside",
+            textfont=dict(size=10),
+            customdata=list(zip(df_unor_agg["Unit Organisasi"], df_unor_agg["Real. Keu (%)"])),
+            hovertemplate=(
+                "<b>%{customdata[0]}</b><br>"
+                "Realisasi: %{y:.2f} Miliar<br>"
+                "Real. Keu: %{customdata[1]:.2f}%<extra></extra>"
+            ),
+        ))
+
         fig_bar.update_layout(
-            height=400,
+            barmode="group",
+            height=420,
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
-            margin=dict(l=10, r=10, t=30, b=20),
+            margin=dict(l=10, r=10, t=40, b=20),
             font=dict(family="Inter", size=11, color="#475569"),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             hovermode="x unified",
         )
         fig_bar.update_xaxes(showgrid=False, title=None)
-        fig_bar.update_yaxes(showgrid=True, gridcolor="#edf1f5", title=None)
+        fig_bar.update_yaxes(showgrid=True, gridcolor="#edf1f5", title="Nilai (Miliar Rp)")
 
         st.plotly_chart(fig_bar, use_container_width=True, config={"displayModeBar": False})
 
