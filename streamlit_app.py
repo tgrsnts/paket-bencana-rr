@@ -81,9 +81,11 @@ def abbreviate_unor(name) -> str:
 
 
 def fmt_num(value, decimals: int = 2):
-    """Format angka dengan hingga `decimals` angka di belakang koma.
-    Kalau seluruh angka di belakang koma bernilai 0 (mis. 100.00),
-    ditampilkan sebagai bilangan bulat saja (100), bukan 100.00."""
+    """Format angka dengan hingga `decimals` angka di belakang koma,
+    memakai format Indonesia: '.' sebagai pemisah ribuan dan ','
+    sebagai pemisah desimal (mis. 1.234,50 bukan 1,234.50).
+    Kalau seluruh angka di belakang koma bernilai 0 (mis. 100,00),
+    ditampilkan sebagai bilangan bulat saja (100), bukan 100,00."""
     try:
         v = float(value)
     except (TypeError, ValueError):
@@ -92,8 +94,10 @@ def fmt_num(value, decimals: int = 2):
         return value
     rounded = round(v, decimals)
     if abs(rounded - round(rounded)) < 1e-9:
-        return f"{int(round(rounded)):,}"
-    return f"{rounded:,.{decimals}f}"
+        s = f"{int(round(rounded)):,}"
+    else:
+        s = f"{rounded:,.{decimals}f}"
+    return s.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def fmt_percent(value, decimals: int = 2):
@@ -105,13 +109,10 @@ def fmt_rupiah(value, decimals: int = 2, prefix: str = "Rp "):
 
 
 def fmt_num_id(value, decimals: int = 2):
-    """Sama seperti fmt_num, tapi memakai format angka Indonesia:
-    '.' sebagai pemisah ribuan dan ',' sebagai pemisah desimal
-    (mis. 1.234,50 bukan 1,234.50)."""
-    s = fmt_num(value, decimals)
-    if not isinstance(s, str):
-        return s
-    return s.replace(",", "X").replace(".", ",").replace("X", ".")
+    """Alias fmt_num (dipertahankan untuk kompatibilitas kode yang
+    sudah memanggilnya secara eksplisit) — fmt_num sudah memakai
+    format angka Indonesia secara default."""
+    return fmt_num(value, decimals)
 
 
 def styled_dataframe(df, format_map, key=None):
@@ -1074,7 +1075,7 @@ with st.sidebar:
             html(f"""
             <div class="upload-status upload-ok">
                 ✅ <b>{uploaded_file.name}</b> berhasil dimuat &amp; dianalisis
-                <span class="upload-meta">{len(df_paket):,} paket · {len(df_ro):,} baris RO</span>
+                <span class="upload-meta">{fmt_num(len(df_paket), 0)} paket · {fmt_num(len(df_ro), 0)} baris RO</span>
             </div>
             """)
     else:
@@ -1281,7 +1282,7 @@ with m4:
             <div class="metric-title">Total Paket</div>
             <div class="metric-icon" style="background:#eeeefe;">📦</div>
         </div>
-        <div class="metric-value">{total_paket:,}</div>
+        <div class="metric-value">{fmt_num(total_paket, 0)}</div>
         <div class="metric-sub">Paket terdaftar</div>
     </div>
     """)
@@ -1803,10 +1804,10 @@ if not df_map.empty:
             <hr style="border:0;border-top:1px solid #ddd;">
             <div style="margin:6px 0;"><b>Provinsi</b><br>{row['Provinsi']}</div>
             <div style="margin:6px 0;"><b>Unit Organisasi</b><br>{row['Unit Organisasi']}</div>
-            <div style="margin:6px 0;"><b>Pagu</b><br>Rp {row['Pagu (paket) (Rp ribu)'] * 1000:,.0f}</div>
+            <div style="margin:6px 0;"><b>Pagu</b><br>Rp {fmt_num(row['Pagu (paket) (Rp ribu)'] * 1000, 0)}</div>
             <div style="margin:6px 0;">
                 <b>Progress Fisik</b><br>
-                <span style="color:{marker_color};font-weight:bold;font-size:15px;">{progress:.2f}%</span>
+                <span style="color:{marker_color};font-weight:bold;font-size:15px;">{fmt_num(progress, 2)}%</span>
                 &nbsp;— {status_text}
             </div>
         </div>
@@ -1816,7 +1817,7 @@ if not df_map.empty:
             location=[row["Latitude"], row["Longitude"]],
             radius=7,
             popup=folium.Popup(popup_html, max_width=330),
-            tooltip=f"{row['Nama Paket']} — {progress:.1f}%",
+            tooltip=f"{row['Nama Paket']} — {fmt_num(progress, 1)}%",
             color=marker_color,
             weight=2,
             fill=True,
