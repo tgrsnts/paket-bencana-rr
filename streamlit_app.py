@@ -125,6 +125,30 @@ def styled_dataframe(df, format_map, key=None):
     )
 
 
+def chart_download_button(fig, filename: str, key: str, width: int = 1000, height: int = 600, scale: int = 2):
+    """Tombol kecil untuk mengunduh sebuah grafik Plotly sebagai gambar PNG.
+
+    Butuh paket 'kaleido' terpasang (pip install -U kaleido / uv add kaleido).
+    Kalau kaleido belum ada, tombol tetap muncul tapi menampilkan pesan
+    error yang jelas saat diklik, bukan bikin seluruh dashboard crash.
+    """
+    try:
+        img_bytes = fig.to_image(format="png", width=width, height=height, scale=scale)
+        st.download_button(
+            label="⬇️ Unduh Gambar (PNG)",
+            data=img_bytes,
+            file_name=filename,
+            mime="image/png",
+            key=key,
+        )
+    except Exception as e:
+        st.caption(
+            "⚠️ Gagal membuat gambar untuk diunduh. "
+            "Pastikan paket 'kaleido' sudah terpasang "
+            f"(`uv add kaleido` atau `pip install -U kaleido`). Detail: {e}"
+        )
+
+
 @st.cache_data
 def get_logo_base64(path: str):
     try:
@@ -1209,26 +1233,6 @@ if selected_bencana != "Semua":
     df_filtered = df_filtered[df_filtered["Jenis Bencana"] == selected_bencana]
 
 
-# Subset khusus "Pekerjaan Konstruksi" (baik dari kolom "Kategori" bawaan
-# maupun dari klasifikasi Jenis Kegiatan/Cluster kita sendiri). df_filtered
-# di atas TETAP berisi SEMUA data (tidak difilter) dan dipakai di seluruh
-# dashboard kecuali tiga bagian berikut, yang secara eksplisit hanya
-# menampilkan pekerjaan konstruksi fisik:
-#   1. Donut Chart "Kategori Pekerjaan Konstruksi"
-#   2. Ringkasan Output Infrastruktur Penanganan Bencana
-#   3. Rekapitulasi Paket & Volume Output Berdasarkan Unit Organisasi,
-#      Provinsi & Kategori
-df_filtered_konstruksi = df_filtered.copy()
-if "Kategori" in df_filtered_konstruksi.columns:
-    df_filtered_konstruksi = df_filtered_konstruksi[
-        df_filtered_konstruksi["Kategori"].apply(is_pekerjaan_konstruksi)
-    ]
-df_filtered_konstruksi = df_filtered_konstruksi[
-    df_filtered_konstruksi["Jenis Kegiatan"].notna()
-    & df_filtered_konstruksi["Cluster"].notna()
-].reset_index(drop=True)
-
-
 # =========================================================
 # HEADER
 # =========================================================
@@ -1240,6 +1244,90 @@ html("""
     <p>Monitoring status implementasi, progres fisik, dan realisasi anggaran paket pemulihan bencana.</p>
 </div>
 """)
+
+
+# =========================================================
+# TIDAK ADA DATA UNTUK KOMBINASI FILTER INI -> tampilkan pesan
+# ramah, JANGAN error, dan hentikan render sisa dashboard.
+# =========================================================
+
+if df_filtered.empty:
+    kategori_text = selected_kategori if selected_kategori != "Semua" else None
+    if LOKASI_COL is not None and selected_kab != "Semua":
+        wilayah_text = f"Kabupaten/Kota {selected_kab}"
+    elif selected_prov != "Semua":
+        wilayah_text = f"Provinsi {selected_prov}"
+    else:
+        wilayah_text = None
+
+    if kategori_text and wilayah_text:
+        pesan_utama = f"Tidak ada pekerjaan <b>{kategori_text}</b> di wilayah <b>{wilayah_text}</b>."
+    elif kategori_text:
+        pesan_utama = f"Tidak ada pekerjaan <b>{kategori_text}</b> untuk pilihan filter saat ini."
+    elif wilayah_text:
+        pesan_utama = f"Tidak ada data paket di wilayah <b>{wilayah_text}</b> untuk pilihan filter saat ini."
+    else:
+        pesan_utama = "Tidak ada data paket untuk kombinasi filter yang dipilih saat ini."
+
+    aktif = []
+    if selected_unor != "Semua":
+        aktif.append(f"Unit Organisasi: {selected_unor}")
+    if selected_prov != "Semua":
+        aktif.append(f"Provinsi: {selected_prov}")
+    if LOKASI_COL is not None and selected_kab != "Semua":
+        aktif.append(f"Kabupaten/Kota: {selected_kab}")
+    if selected_kategori != "Semua":
+        aktif.append(f"Kategori Pekerjaan: {selected_kategori}")
+    if selected_bencana != "Semua":
+        aktif.append(f"Jenis Bencana: {selected_bencana}")
+    filter_list_html = "".join(f"<li>{f}</li>" for f in aktif)
+
+    html(f"""
+    <div class="content-card" style="text-align:center; padding:50px 20px;">
+        <div style="font-size:48px; margin-bottom:12px;">🔍</div>
+        <div style="font-size:1.05rem; font-weight:800; color:#1F4E78; margin-bottom:6px;">
+            Tidak Ada Data untuk Kombinasi Filter Ini
+        </div>
+        <div style="font-size:0.88rem; color:#334155; max-width:520px; margin:0 auto 14px auto;">
+            {pesan_utama}
+        </div>
+        <ul style="font-size:0.78rem; color:#64748b; display:inline-block; text-align:left; margin:0 auto;">
+            {filter_list_html}
+        </ul>
+        <div style="font-size:0.78rem; color:#94a3b8; margin-top:10px;">
+            Coba ubah atau kosongkan salah satu filter di sidebar (mis. pilih "Semua") untuk melihat data.
+        </div>
+    </div>
+    """)
+    st.stop()
+
+
+# Subset khusus "Pekerjaan Konstruksi" (baik dari kolom "Kategori" bawaan
+# maupun dari klasifikasi Jenis Kegiatan/Cluster kita sendiri). df_filtered
+# di atas TETAP berisi SEMUA data (tidak difilter) dan dipakai di seluruh
+# dashboard kecuali tiga bagian berikut, yang secara eksplisit hanya
+# menampilkan pekerjaan konstruksi fisik:
+#   1. Donut Chart "Kategori Pekerjaan Konstruksi"
+#   2. Ringkasan Output Infrastruktur Penanganan Bencana
+#   3. Rekapitulasi Paket & Volume Output Berdasarkan Unit Organisasi,
+#      Provinsi & Kategori
+#
+# CATATAN PENTING: filter di bawah ini SENGAJA dilewati kalau df_filtered
+# sudah kosong (0 baris). Ini menghindari bug pandas: memanggil
+# `.apply(fungsi)` pada Series kosong lalu memakainya untuk boolean-index
+# dataframe kosong bisa membuat SEMUA KOLOM ikut hilang (bukan cuma
+# barisnya), yang berujung KeyError saat kolom itu diakses lagi di bawah.
+df_filtered_konstruksi = df_filtered.copy()
+if not df_filtered_konstruksi.empty:
+    if "Kategori" in df_filtered_konstruksi.columns:
+        df_filtered_konstruksi = df_filtered_konstruksi[
+            df_filtered_konstruksi["Kategori"].apply(is_pekerjaan_konstruksi)
+        ]
+    df_filtered_konstruksi = df_filtered_konstruksi[
+        df_filtered_konstruksi["Jenis Kegiatan"].notna()
+        & df_filtered_konstruksi["Cluster"].notna()
+    ]
+df_filtered_konstruksi = df_filtered_konstruksi.reset_index(drop=True)
 
 
 # =========================================================
@@ -1392,6 +1480,13 @@ with col_left:
         fig_bar.update_yaxes(showgrid=True, gridcolor="#edf1f5", title="Nilai (Miliar Rp)")
 
         st.plotly_chart(fig_bar, use_container_width=True, config={"displayModeBar": False})
+        chart_download_button(
+            fig_bar,
+            filename="realisasi_vs_pagu_per_unor.png",
+            key="dl_bar_unor",
+            width=1100,
+            height=550,
+        )
 
 with col_right:
     with st.container(border=True):
@@ -1428,6 +1523,13 @@ with col_right:
         )
 
         st.plotly_chart(fig_pie, use_container_width=True, config={"displayModeBar": False})
+        chart_download_button(
+            fig_pie,
+            filename="distribusi_kategori_konstruksi.png",
+            key="dl_pie_kategori",
+            width=900,
+            height=650,
+        )
 
 
 # =========================================================
