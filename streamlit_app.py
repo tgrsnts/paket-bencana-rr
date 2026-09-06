@@ -126,18 +126,16 @@ def styled_dataframe(df, format_map, key=None):
         key=key,
     )
 
-
 def chart_download_button(fig, filename: str, key: str, width: int = 1000, height: int = 600, scale: int = 2):
-    """Tombol kecil untuk mengunduh sebuah grafik Plotly sebagai gambar PNG."""
+    """Tombol mengunduh grafik Plotly sebagai gambar PNG."""
     try:
-        # Menggunakan pio.to_image agar kompatibel dengan kaleido tanpa butuh Chrome eksternal
+        # Panggil pio.to_image tanpa parameter 'engine'
         img_bytes = pio.to_image(
             fig, 
             format="png", 
             width=width, 
             height=height, 
-            scale=scale,
-            engine="kaleido"
+            scale=scale
         )
         st.download_button(
             label="⬇️ Unduh Gambar (PNG)",
@@ -149,8 +147,7 @@ def chart_download_button(fig, filename: str, key: str, width: int = 1000, heigh
     except Exception as e:
         st.caption(
             "⚠️ Gagal membuat gambar untuk diunduh. "
-            "Pastikan paket 'kaleido' sudah terpasang "
-            f"(`uv add kaleido` atau `pip install -U kaleido`). Detail: {e}"
+            f"Detail: {e}"
         )
 
 
