@@ -7,6 +7,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from streamlit_folium import st_folium
 import folium
+import plotly.io as pio
+import streamlit as st
 
 
 # =========================================================
@@ -126,14 +128,17 @@ def styled_dataframe(df, format_map, key=None):
 
 
 def chart_download_button(fig, filename: str, key: str, width: int = 1000, height: int = 600, scale: int = 2):
-    """Tombol kecil untuk mengunduh sebuah grafik Plotly sebagai gambar PNG.
-
-    Butuh paket 'kaleido' terpasang (pip install -U kaleido / uv add kaleido).
-    Kalau kaleido belum ada, tombol tetap muncul tapi menampilkan pesan
-    error yang jelas saat diklik, bukan bikin seluruh dashboard crash.
-    """
+    """Tombol kecil untuk mengunduh sebuah grafik Plotly sebagai gambar PNG."""
     try:
-        img_bytes = fig.to_image(format="png", width=width, height=height, scale=scale)
+        # Menggunakan pio.to_image agar kompatibel dengan kaleido tanpa butuh Chrome eksternal
+        img_bytes = pio.to_image(
+            fig, 
+            format="png", 
+            width=width, 
+            height=height, 
+            scale=scale,
+            engine="kaleido"
+        )
         st.download_button(
             label="⬇️ Unduh Gambar (PNG)",
             data=img_bytes,
