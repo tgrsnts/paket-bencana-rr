@@ -514,9 +514,15 @@ def is_specific_kabupaten(raw, provinsi_name: str) -> bool:
     return True
 
 
-def render_rincian_item(df_items: pd.DataFrame, level_label: str, level_name: str):
+def render_rincian_item(df_items: pd.DataFrame, level_label: str, level_name: str, search_term: str | None = None):
     if df_items.empty:
-        st.info(f"Tidak ada data paket untuk {level_label} {level_name} pada filter saat ini.")
+        if search_term:
+            st.info(
+                f"Tidak ada paket yang cocok dengan pencarian \"{search_term}\" "
+                f"untuk {level_label} {level_name} pada filter saat ini."
+            )
+        else:
+            st.info(f"Tidak ada data paket untuk {level_label} {level_name} pada filter saat ini.")
         return
 
     df_item = df_items.reset_index(drop=True).copy()
@@ -1022,6 +1028,51 @@ section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button {
 div[data-testid="stDataFrame"] {
     border-radius: 12px;
     overflow: hidden;
+}
+
+/* CUSTOM HTML TABLE (dipakai untuk kolom dengan rowspan, karena
+   st.dataframe bawaan Streamlit tidak mendukung rowspan) */
+.rekap-table-wrap {
+    overflow-x: auto;
+    border: 1px solid #e8edf3;
+    border-radius: 12px;
+    margin-bottom: 10px;
+}
+table.rekap-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+    font-family: 'Inter', sans-serif;
+}
+table.rekap-table thead th.rekap-th {
+    background: #124d7c;
+    color: #ffffff;
+    font-weight: 700;
+    text-align: left;
+    padding: 10px 12px;
+    white-space: nowrap;
+}
+table.rekap-table tbody td.rekap-td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #eef1f6;
+    color: #1e293b;
+    vertical-align: middle;
+}
+table.rekap-table tbody tr:hover td.rekap-td {
+    background: #f6f9fc;
+}
+table.rekap-table tbody td.rekap-prov {
+    font-weight: 700;
+    color: #124d7c;
+    background: #f8fafc;
+    border-right: 1px solid #eef1f6;
+}
+table.rekap-table tbody td.rekap-pagu-prov {
+    font-weight: 800;
+    color: #0f7a4b;
+    background: #f8fafc;
+    border-right: 1px solid #eef1f6;
+    white-space: nowrap;
 }
 
 /* TABS */
@@ -1650,6 +1701,8 @@ category_card.markdown("""
 <div style="font-size:0.75rem; color:#64748b; margin-bottom:14px;">
     Tabel dikelompokkan berdasarkan <b>Unit Organisasi</b>, <b>Provinsi</b>, dan <b>Jenis Kegiatan (Kategori)</b>.
     Satuan volume mengikuti satuan baku tiap kategori (lihat <code>SATUAN_MAP</code>), bukan kolom "Satuan" mentah.
+    Kolom <b>Total Pagu Provinsi</b> menjumlahkan seluruh paket di provinsi tersebut (untuk unit organisasi yang sama)
+    dan digabung (rowspan) untuk tiap baris kategori di provinsi itu.
 </div>
 """, unsafe_allow_html=True)
 
@@ -1692,6 +1745,57 @@ df_display_unor = df_display_unor.sort_values(
 
 df_display_unor["_unor_abbr"] = df_display_unor["Unit Organisasi"].apply(abbreviate_unor)
 
+
+def render_rekap_table_provinsi_rowspan(df, provinsi_col="Provinsi", pagu_col="Total Pagu (Rp ribu)"):
+    """Render tabel HTML manual dengan kolom 'Total Pagu Provinsi (Rp ribu)'
+    yang di-rowspan sebanyak jumlah baris kategori pada provinsi yang sama.
+    st.dataframe bawaan Streamlit tidak mendukung rowspan HTML, jadi tabel
+    ini dirender langsung sebagai <table> via st.markdown."""
+    if df.empty:
+        st.info("Tidak ada data untuk ditampilkan.")
+        return
+
+    df = df.reset_index(drop=True)
+    other_cols = [c for c in df.columns if c != provinsi_col]
+
+    pagu_per_prov = df.groupby(provinsi_col)[pagu_col].transform("sum")
+    prov_counts = df[provinsi_col].value_counts().to_dict()
+
+    seen_prov = set()
+    rows_html = []
+    for _, row in df.iterrows():
+        prov = row[provinsi_col]
+        cells = []
+        if prov not in seen_prov:
+            seen_prov.add(prov)
+            rowspan = prov_counts[prov]
+            total_prov = pagu_per_prov.loc[df[provinsi_col] == prov].iloc[0]
+            cells.append(f'<td class="rekap-td rekap-prov" rowspan="{rowspan}">{prov}</td>')
+            cells.append(
+                f'<td class="rekap-td rekap-pagu-prov" rowspan="{rowspan}">Rp {fmt_num(total_prov)}</td>'
+            )
+        for col in other_cols:
+            val = row[col]
+            if col == pagu_col:
+                val = fmt_num(val)
+            elif col == "Jumlah Paket":
+                val = fmt_num(val, 0)
+            cells.append(f'<td class="rekap-td">{val}</td>')
+        rows_html.append(f"<tr>{''.join(cells)}</tr>")
+
+    header_cols = [provinsi_col, "Total Pagu Provinsi (Rp ribu)"] + other_cols
+    header_html = "".join(f'<th class="rekap-th">{c}</th>' for c in header_cols)
+
+    html(f"""
+    <div class="rekap-table-wrap">
+    <table class="rekap-table">
+        <thead><tr>{header_html}</tr></thead>
+        <tbody>{''.join(rows_html)}</tbody>
+    </table>
+    </div>
+    """)
+
+
 UNOR_ORDER = ["BM", "CK", "SDA", "PS"]
 UNOR_ICON = {"BM": "🛣️", "CK": "🏘️", "SDA": "💧", "PS": "🏗️"}
 
@@ -1711,11 +1815,7 @@ for tab, abbr in zip(kat_unor_tabs, UNOR_ORDER):
         if df_kat_unor_sub.empty:
             st.info(f"Tidak ada data untuk unit organisasi {UNOR_FULLNAME.get(abbr, abbr)} pada filter saat ini.")
         else:
-            st.dataframe(
-                df_kat_unor_sub.style.format({"Total Pagu (Rp ribu)": fmt_rupiah}),
-                use_container_width=True,
-                hide_index=True,
-            )
+            render_rekap_table_provinsi_rowspan(df_kat_unor_sub)
 
 if other_abbrs_kat:
     with category_card.expander(f"📦 Unit organisasi lainnya di luar BM/CK/SDA/PS ({', '.join(other_abbrs_kat)})"):
@@ -1723,11 +1823,7 @@ if other_abbrs_kat:
         for tab, abbr in zip(other_kat_tabs, other_abbrs_kat):
             with tab:
                 df_kat_unor_sub = df_display_unor[df_display_unor["_unor_abbr"] == abbr].drop(columns=["_unor_abbr", "Unit Organisasi"])
-                st.dataframe(
-                    df_kat_unor_sub.style.format({"Total Pagu (Rp ribu)": fmt_rupiah}),
-                    use_container_width=True,
-                    hide_index=True,
-                )
+                render_rekap_table_provinsi_rowspan(df_kat_unor_sub)
 
 category_card.markdown('<div style="height:20px;"></div>', unsafe_allow_html=True)
 
@@ -1738,6 +1834,20 @@ if kat_list:
         kat_list
     )
 
+    df_kat_scope = df_filtered_kat[df_filtered_kat["Jenis Kegiatan"] == selected_view_kat]
+
+    if LOKASI_COL is not None:
+        kab_kat_options = ["Semua"] + sorted(
+            df_kat_scope["_lokasi_clean"].dropna().astype(str).unique().tolist()
+        )
+        selected_view_kab = category_card.selectbox(
+            "🏘️ Filter Kabupaten/Kota:",
+            kab_kat_options,
+            key="filter_kab_kategori",
+        )
+        if selected_view_kab != "Semua":
+            df_kat_scope = df_kat_scope[df_kat_scope["_lokasi_clean"] == selected_view_kab]
+
     show_cols = ["Nama Paket", "Unit Organisasi", "Provinsi"]
     if vol_col:
         show_cols.append(vol_col)
@@ -1745,8 +1855,8 @@ if kat_list:
         show_cols.append(satuan_col)
     show_cols.extend(["Pagu (paket) (Rp ribu)", "Realisasi (paket) (Rp ribu)", "Real. Fis (%)"])
 
-    df_kat_detail = df_filtered_kat[df_filtered_kat["Jenis Kegiatan"] == selected_view_kat][
-        [c for c in show_cols if c in df_filtered_kat.columns]
+    df_kat_detail = df_kat_scope[
+        [c for c in show_cols if c in df_kat_scope.columns]
     ].copy()
 
     df_kat_detail = df_kat_detail.rename(columns={
@@ -1762,11 +1872,14 @@ if kat_list:
     if vol_col and vol_col in df_kat_detail.columns:
         detail_fmt[vol_col] = fmt_num
 
-    category_card.dataframe(
-        df_kat_detail.style.format(detail_fmt),
-        use_container_width=True,
-        hide_index=True
-    )
+    if df_kat_detail.empty:
+        category_card.info("Tidak ada paket untuk kombinasi kategori dan kabupaten/kota yang dipilih.")
+    else:
+        category_card.dataframe(
+            df_kat_detail.style.format(detail_fmt),
+            use_container_width=True,
+            hide_index=True
+        )
 
 
 # =========================================================
@@ -1900,13 +2013,26 @@ def strip_provinsi_prefix(name: str) -> str:
 
 
 with detail_card:
+    search_term = st.text_input(
+        "🔍 Cari Nama Paket",
+        key="search_rincian_paket",
+        placeholder="Ketik sebagian nama paket untuk mencari di seluruh tab di bawah...",
+    ).strip()
+
+    def _apply_search(df):
+        if search_term:
+            return df[df["Nama Paket"].astype(str).str.contains(search_term, case=False, na=False)]
+        return df
+
     if LOKASI_COL is not None and selected_kab != "Semua":
-        render_rincian_item(df_filtered, "Kabupaten/Kota", selected_kab)
+        render_rincian_item(_apply_search(df_filtered), "Kabupaten/Kota", selected_kab, search_term)
 
     elif selected_prov != "Semua":
         df_item_prov = df_filtered[df_filtered["_lokasi_clean"].isna()].copy() \
             if LOKASI_COL is not None else df_filtered
-        render_rincian_item(df_item_prov, "Provinsi", strip_provinsi_prefix(selected_prov))
+        render_rincian_item(
+            _apply_search(df_item_prov), "Provinsi", strip_provinsi_prefix(selected_prov), search_term
+        )
 
     else:
         province_list = df_prov_summary["Provinsi"].tolist()
@@ -1920,7 +2046,9 @@ with detail_card:
                         (df_filtered["Provinsi"] == prov)
                         & (df_filtered["_lokasi_clean"].isna() if LOKASI_COL is not None else True)
                     ].copy()
-                    render_rincian_item(df_item_prov, "Provinsi", strip_provinsi_prefix(prov))
+                    render_rincian_item(
+                        _apply_search(df_item_prov), "Provinsi", strip_provinsi_prefix(prov), search_term
+                    )
         else:
             st.info("Tidak ada data untuk ditampilkan pada pilihan filter saat ini.")
 
