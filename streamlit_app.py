@@ -656,7 +656,7 @@ def render_rincian_item(df_items: pd.DataFrame, level_label: str, level_name: st
         showgrid=True,
         gridcolor="#E0E0E0",
         dtick=1,
-        tickfont=dict(size=11, color="#000000")
+        tickfont=dict(family="Inter", size=11, color="#000000")
     )
 
     fig_combo.update_yaxes(
@@ -688,8 +688,14 @@ html("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
-html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
+html, body, .stApp, .stApp *, [class*="css"] {
+    font-family: 'Inter', sans-serif !important;
+}
+
+[data-testid="stIconMaterial"] {
+    font-family: 'Material Symbols Rounded' !important;
+    font-weight: normal !important;
+    font-style: normal !important;
 }
 
 .stApp {
@@ -795,6 +801,11 @@ section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]:hover {
 }
 section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] small {
     color: #8290a3 !important;
+}
+section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] svg {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button {
     border-radius: 8px !important;
@@ -1495,7 +1506,7 @@ with col_left:
             marker_color="#124d7c",
             text=[fmt_num(v) for v in df_unor_agg["Pagu (Miliar)"]],
             textposition="outside",
-            textfont=dict(size=10),
+            textfont=dict(family="Inter", size=10),
             customdata=df_unor_agg["Unit Organisasi"],
             hovertemplate="<b>%{customdata}</b><br>Pagu: %{y:.2f} Miliar<extra></extra>",
         ))
@@ -1510,7 +1521,7 @@ with col_left:
                 for v, p in zip(df_unor_agg["Realisasi (Miliar)"], df_unor_agg["Real. Keu (%)"])
             ],
             textposition="outside",
-            textfont=dict(size=10),
+            textfont=dict(family="Inter", size=10),
             customdata=list(zip(df_unor_agg["Unit Organisasi"], df_unor_agg["Real. Keu (%)"])),
             hovertemplate=(
                 "<b>%{customdata[0]}</b><br>"
