@@ -560,7 +560,7 @@ def render_rincian_item(df_items: pd.DataFrame, level_label: str, level_name: st
     <div style="font-size:0.95rem; font-weight:800; color:#1F4E78; margin-bottom:2px;">
         Ringkasan Paket Tingkat {level_label} - {level_name}
     </div>
-    <div style="font-size:0.74rem; color:#94a3b8; font-family: 'Segoe UI', sans-serif; font-style: italic; margin-bottom:12px;">
+    <div style="font-size:0.74rem; color:#94a3b8; font-family: 'Inter', sans-serif; font-style: italic; margin-bottom:12px;">
         {subtitle}
     </div>
     """)
@@ -629,7 +629,7 @@ def render_rincian_item(df_items: pd.DataFrame, level_label: str, level_name: st
     fig_combo.update_layout(
         title=dict(
             text=f"<b>Pagu vs Realisasi per Item - {level_name}</b>",
-            font=dict(size=16, family="Segoe UI, Arial", color="#000000"),
+            font=dict(size=16, family="Inter", color="#000000"),
             x=0.5,
             xanchor="center"
         ),
@@ -637,7 +637,7 @@ def render_rincian_item(df_items: pd.DataFrame, level_label: str, level_name: st
         height=450,
         paper_bgcolor="#ffffff",
         plot_bgcolor="#ffffff",
-        font=dict(family="Segoe UI, Arial", size=11, color="#000000"),
+        font=dict(family="Inter", size=11, color="#000000"),
         legend=dict(
             orientation="v",
             yanchor="top",
@@ -2085,7 +2085,7 @@ if not df_map.empty:
             marker_color, status_text = "green", "Progress Baik"
 
         popup_html = f"""
-        <div style="font-family:Arial;min-width:260px;padding:5px;">
+        <div style="font-family:Inter,sans-serif;min-width:260px;padding:5px;">
             <div style="font-size:14px;font-weight:bold;color:#123;margin-bottom:8px;">
                 {row['Nama Paket']}
             </div>
