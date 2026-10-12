@@ -2415,7 +2415,14 @@ with detail_card:
 
 html('<div class="section-title">🗺️ Sebaran Lokasi Paket</div>')
 
-df_map = df_filtered.dropna(subset=["Latitude", "Longitude"])
+df_map = df_filtered.copy()
+df_map["Latitude"] = pd.to_numeric(df_map["Latitude"], errors="coerce")
+df_map["Longitude"] = pd.to_numeric(df_map["Longitude"], errors="coerce")
+df_map = df_map.dropna(subset=["Latitude", "Longitude"])
+df_map = df_map[
+    df_map["Latitude"].between(-90, 90)
+    & df_map["Longitude"].between(-180, 180)
+]
 
 if not df_map.empty:
     center_lat = df_map["Latitude"].mean()
@@ -2424,7 +2431,7 @@ if not df_map.empty:
     m = folium.Map(
         location=[center_lat, center_lon],
         zoom_start=6,
-        tiles="CartoDB positron",
+        tiles="OpenStreetMap",
         control_scale=True,
     )
 
