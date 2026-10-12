@@ -514,6 +514,301 @@ def is_specific_kabupaten(raw, provinsi_name: str) -> bool:
     return True
 
 
+def normalize_csv_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalisasi variasi nama kolom CSV ke kolom acuan dashboard bencana."""
+    column_mapping = {
+        "PROVINSI": "Provinsi",
+        "Provinsi_Bencana": "Provinsi",
+        "KABUPATEN": "Kabupaten",
+        "Kabupaten_Kota": "Kabupaten",
+        "Kab_Kota": "Kabupaten",
+        "Area_Wilayah": "Kabupaten",
+        "Nama_Infrastruktur": "Nama_Infrastruktur",
+        "Nama_Bendung_Terdampak": "Nama_Infrastruktur",
+        "Nama_Checkdam": "Nama_Infrastruktur",
+        "Nama_DI": "Nama_Infrastruktur",
+        "Nama_Embung": "Nama_Infrastruktur",
+        "Nama_Muara": "Nama_Infrastruktur",
+        "Nama_Sungai": "Nama_Infrastruktur",
+        "Nama_Ruas": "Nama_Infrastruktur",
+        "Nama_Jembatan": "Nama_Infrastruktur",
+        "Infrastruktur": "Nama_Infrastruktur",
+        "Nama_Faskes": "Nama_Infrastruktur",
+        "Nama_Puskesmas": "Nama_Infrastruktur",
+        "Nama_Posko": "Nama_Infrastruktur",
+        "Nama_Bangunan": "Nama_Infrastruktur",
+        "Nama": "Nama_Infrastruktur",
+        "Nama Kegiatan": "Nama_Infrastruktur",
+        "Nama_Paket": "Nama_Infrastruktur",
+        "PAKET_PEKERJAAN": "Nama_Infrastruktur",
+        "Kegiatan": "Nama_Infrastruktur",
+        "KEGIATAN": "Nama_Infrastruktur",
+        "Lokasi": "Nama_Infrastruktur",
+        "Progres_TD": "Progres_TD",
+        "Progres_Fisik_TD": "Progres_TD",
+        "Progres_Persen": "Progres_TD",
+        "Progres": "Progres_TD",
+        "Progres_Presentase": "Progres_TD",
+        "Presentase_Progres": "Progres_TD",
+        "Presentase_Progress": "Progres_TD",
+        "PROGRESS": "Progres_TD",
+        "Progres_RR": "Progres_RR",
+        "Progres_Fisik_RR": "Progres_RR",
+    }
+
+    normalized = df.rename(columns=column_mapping).copy()
+    required_cols = [
+        "Provinsi",
+        "Kabupaten",
+        "Nama_Infrastruktur",
+        "Progres_TD",
+        "Progres_RR",
+    ]
+    for col in required_cols:
+        if col not in normalized.columns:
+            normalized[col] = None
+
+    for col in ["Progres_TD", "Progres_RR"]:
+        normalized[col] = pd.to_numeric(
+            normalized[col].astype("string").str.replace("%", "", regex=False).str.strip(),
+            errors="coerce",
+        )
+
+    return normalized
+
+
+def render_csv_analysis(uploaded_csv) -> None:
+    """Render the CSV-based disaster infrastructure analysis."""
+    if uploaded_csv is None:
+        html("""
+        <div class="dashboard-header">
+            <div class="header-label">Dashboard Monitoring Infrastruktur</div>
+            <h1>📊 Penanganan Rehabilitasi dan Rekonstruksi Pasca Bencana</h1>
+            <p>Silakan unggah file CSV data infrastruktur terdampak melalui panel di sebelah kiri untuk mulai menganalisis.</p>
+        </div>
+        """)
+        html("""
+        <div class="content-card" style="text-align:center; padding:60px 20px;">
+            <div style="font-size:48px; margin-bottom:12px;">📂</div>
+            <div style="font-size:1.05rem; font-weight:800; color:#1F4E78; margin-bottom:6px;">
+                Belum Ada Data untuk Dianalisis
+            </div>
+            <div style="font-size:0.85rem; color:#64748b; max-width:520px; margin:0 auto;">
+                Unggah file CSV melalui panel di sebelah kiri untuk mulai melihat
+                ringkasan, progres, dan rincian infrastruktur terdampak.
+            </div>
+        </div>
+        """)
+        return
+
+    try:
+        try:
+            raw_df = pd.read_csv(uploaded_csv)
+        except UnicodeDecodeError:
+            uploaded_csv.seek(0)
+            raw_df = pd.read_csv(uploaded_csv, encoding="latin1")
+        df = normalize_csv_dataframe(raw_df)
+    except Exception as exc:
+        st.error(f"Gagal membaca file CSV: {exc}")
+        return
+
+    html(f"""
+    <div class="dashboard-header">
+        <div class="header-label">Dashboard Monitoring Infrastruktur</div>
+        <h1>📊 Penanganan Rehabilitasi dan Rekonstruksi Pasca Bencana</h1>
+        <p>Analisis infrastruktur terdampak berdasarkan wilayah dan progres penanganan.</p>
+        <div class="upload-meta" style="margin-top:10px;">📄 {uploaded_csv.name}</div>
+    </div>
+    """)
+
+    list_provinsi = ["Semua Provinsi"] + sorted(
+        df["Provinsi"].dropna().astype(str).unique().tolist()
+    )
+    filter_col_prov, filter_col_kab = st.columns(2)
+    with filter_col_prov:
+        selected_prov = st.selectbox("📍 Provinsi", list_provinsi, key="csv_provinsi")
+    filtered_df = (
+        df if selected_prov == "Semua Provinsi"
+        else df[df["Provinsi"].astype(str) == selected_prov]
+    )
+
+    list_kabupaten = ["Semua Kabupaten/Kota"] + sorted(
+        filtered_df["Kabupaten"].dropna().astype(str).unique().tolist()
+    )
+    with filter_col_kab:
+        selected_kab = st.selectbox(
+            "🏘️ Kabupaten/Kota",
+            list_kabupaten,
+            key="csv_kabupaten",
+        )
+    if selected_kab != "Semua Kabupaten/Kota":
+        filtered_df = filtered_df[
+            filtered_df["Kabupaten"].astype(str) == selected_kab
+        ]
+
+    total_infrastruktur = len(filtered_df)
+    total_provinsi = filtered_df["Provinsi"].dropna().nunique()
+    total_kabupaten = filtered_df["Kabupaten"].dropna().nunique()
+    avg_td = filtered_df["Progres_TD"].mean()
+    avg_rr = filtered_df["Progres_RR"].mean()
+
+    html('<div class="section-title">📊 Ringkasan Kondisi Infrastruktur</div>')
+    metric_cols = st.columns(4)
+    metrics = [
+        ("Total Infrastruktur", fmt_num(total_infrastruktur, 0), "Data terdampak terpilih", "#e8f1fb", "🏗️"),
+        ("Wilayah Provinsi", fmt_num(total_provinsi, 0), "Provinsi terdata", "#e8f8f1", "📍"),
+        ("Kabupaten/Kota", fmt_num(total_kabupaten, 0), "Wilayah terdata", "#fff5df", "🏘️"),
+        ("Rata-rata Progres RR", fmt_percent(avg_rr) if pd.notna(avg_rr) else "-", "Kemajuan rehabilitasi", "#eeeefe", "📈"),
+    ]
+    for metric_col, (title, value, subtitle, color, icon) in zip(metric_cols, metrics):
+        with metric_col:
+            html(f"""
+            <div class="metric-card">
+                <div class="metric-top">
+                    <div class="metric-title">{title}</div>
+                    <div class="metric-icon" style="background:{color};">{icon}</div>
+                </div>
+                <div class="metric-value">{value}</div>
+                <div class="metric-sub">{subtitle}</div>
+            </div>
+            """)
+
+    progress_col, chart_col = st.columns(2)
+    with progress_col:
+        html('<div class="section-title">📌 Ringkasan Progress</div>')
+        progress_df = pd.DataFrame({
+            "Tahapan": ["Tanggap Darurat", "Rehabilitasi & Rekonstruksi"],
+            "Progress": [avg_td if pd.notna(avg_td) else 0, avg_rr if pd.notna(avg_rr) else 0],
+        })
+        fig_progress = px.bar(
+            progress_df,
+            x="Progress",
+            y="Tahapan",
+            orientation="h",
+            text="Progress",
+            range_x=[0, 100],
+            color="Tahapan",
+            color_discrete_sequence=["#4682B4", "#10a66a"],
+        )
+        fig_progress.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+        fig_progress.update_layout(
+            height=240,
+            showlegend=False,
+            margin=dict(l=10, r=30, t=20, b=20),
+            xaxis_title="Persentase (%)",
+            yaxis_title="",
+        )
+        st.plotly_chart(fig_progress, width="stretch", config={"displayModeBar": False})
+    with chart_col:
+        html('<div class="section-title">🗺️ Sebaran Infrastruktur</div>')
+        chart_df = (
+            filtered_df.assign(Kabupaten=filtered_df["Kabupaten"].fillna("Tidak diketahui").astype(str))
+            .groupby("Kabupaten")
+            .size()
+            .reset_index(name="Jumlah")
+            .sort_values("Jumlah", ascending=False)
+            .head(10)
+        )
+        fig_distribution = px.bar(
+            chart_df,
+            x="Jumlah",
+            y="Kabupaten",
+            orientation="h",
+            text="Jumlah",
+            color="Jumlah",
+            color_continuous_scale=["#dbeafe", "#1F4E78"],
+        )
+        fig_distribution.update_layout(
+            height=240,
+            coloraxis_showscale=False,
+            margin=dict(l=10, r=20, t=20, b=20),
+            xaxis_title="Jumlah Infrastruktur",
+            yaxis_title="",
+        )
+        fig_distribution.update_yaxes(autorange="reversed")
+        st.plotly_chart(fig_distribution, width="stretch", config={"displayModeBar": False})
+
+    html('<div class="section-title">📋 Ringkasan per Kabupaten / Kota</div>')
+    summary_df = (
+        filtered_df.groupby("Kabupaten", dropna=False)
+        .agg(
+            Jumlah_Infrastruktur=("Nama_Infrastruktur", "count"),
+            Avg_Progres_TD=("Progres_TD", "mean"),
+            Avg_Progres_RR=("Progres_RR", "mean"),
+        )
+        .reset_index()
+        .rename(
+            columns={
+                "Kabupaten": "Kabupaten / Kota",
+                "Jumlah_Infrastruktur": "Jumlah Infrastruktur Terdampak",
+                "Avg_Progres_TD": "Rata-Rata Tanggap Darurat",
+                "Avg_Progres_RR": "Rata-Rata Rencana Rekonstruksi",
+            }
+        )
+    )
+    for col in ["Rata-Rata Tanggap Darurat", "Rata-Rata Rencana Rekonstruksi"]:
+        summary_df[col] = summary_df[col].map(
+            lambda value: f"{value:.2f}%" if pd.notna(value) else "-"
+        )
+
+    st.dataframe(summary_df, width="stretch", hide_index=True)
+
+    html('<div class="section-title">🔍 Detail Infrastruktur Terdampak</div>')
+    st.caption(
+        "Daftar berikut mengikuti filter wilayah yang sedang dipilih. "
+        "Buka panel kabupaten/kota untuk melihat progres penanganannya."
+    )
+    infrastructure_names = (
+        filtered_df[["Provinsi", "Kabupaten", "Nama_Infrastruktur"]]
+        .copy()
+        .rename(
+            columns={
+                "Provinsi": "Provinsi",
+                "Kabupaten": "Kabupaten / Kota",
+                "Nama_Infrastruktur": "Nama Infrastruktur",
+            }
+        )
+    )
+    for col in infrastructure_names.columns:
+        infrastructure_names[col] = (
+            infrastructure_names[col].astype("string").fillna("-")
+        )
+    infrastructure_names.insert(
+        0, "No", range(1, len(infrastructure_names) + 1)
+    )
+    st.dataframe(
+        infrastructure_names,
+        width="stretch",
+        hide_index=True,
+        height=min(420, 38 + (len(infrastructure_names) * 35)),
+    )
+
+    display_cols = [
+        col
+        for col in [
+            "Nama_Infrastruktur",
+            "Kecamatan",
+            "Tingkat_Kerusakan",
+            "Status_Penanganan",
+            "Progres_TD",
+            "Progres_RR",
+        ]
+        if col in filtered_df.columns
+    ]
+    for kab in sorted(filtered_df["Kabupaten"].dropna().astype(str).unique()):
+        kab_data = filtered_df[filtered_df["Kabupaten"].astype(str) == kab]
+        with st.expander(f"📍 {kab} — Total: {len(kab_data)} infrastruktur terdampak"):
+            detail_df = kab_data[display_cols].copy()
+            # Convert to object before replacing missing values so nullable
+            # numeric columns such as Float64 accept the display placeholder.
+            detail_df = detail_df.astype(object).where(detail_df.notna(), "-")
+            st.dataframe(
+                detail_df,
+                width="stretch",
+                hide_index=True,
+            )
+
+
 def render_rincian_item(df_items: pd.DataFrame, level_label: str, level_name: str, search_term: str | None = None):
     if df_items.empty:
         if search_term:
@@ -1116,8 +1411,26 @@ button[data-baseweb="tab"][aria-selected="true"] {
 
 
 # =========================================================
+# MODE ANALISIS
+# =========================================================
+
+if "analysis_mode" not in st.session_state:
+    st.session_state.analysis_mode = "excel"
+
+
+# =========================================================
 # SIDEBAR
 # =========================================================
+
+data_ok = False
+df_ro = None
+df_paket = None
+selected_unor = "Semua"
+selected_prov = "Semua"
+selected_kab = "Semua"
+selected_kategori = "Semua"
+selected_bencana = "Semua"
+LOKASI_COL = None
 
 with st.sidebar:
     if LOGO_B64:
@@ -1138,21 +1451,46 @@ with st.sidebar:
     <div class="sidebar-filters">
     """)
 
-    html('<div class="filter-title">📤&nbsp; Unggah Data (.xlsx)</div>')
+    html('<div class="filter-title">🔁&nbsp; Pilih Analisis</div>')
+    mode_col_rr, mode_col_csv = st.columns(2)
+    with mode_col_rr:
+        if st.button(
+            "Bencana RR",
+            type="primary" if st.session_state.analysis_mode == "excel" else "secondary",
+            width="stretch",
+            key="choose_excel_analysis",
+        ):
+            st.session_state.analysis_mode = "excel"
+            st.rerun()
+    with mode_col_csv:
+        if st.button(
+            "Infrastruktur CSV",
+            type="primary" if st.session_state.analysis_mode == "csv" else "secondary",
+            width="stretch",
+            key="choose_csv_analysis",
+        ):
+            st.session_state.analysis_mode = "csv"
+            st.rerun()
+
+    upload_type = ["xlsx"] if st.session_state.analysis_mode == "excel" else ["csv"]
+    upload_label = (
+        "📤 Unggah data Bencana RR (.xlsx)"
+        if st.session_state.analysis_mode == "excel"
+        else "📤 Unggah data Infrastruktur Terdampak (.csv)"
+    )
+    html(f'<div class="filter-title">{upload_label}</div>')
     uploaded_file = st.file_uploader(
         "Unggah data",
-        type=["xlsx"],
+        type=upload_type,
         label_visibility="collapsed",
         help=(
-            "File harus punya sheet 'Daftar RO' dan 'Daftar Paket' "
-            "dengan format kolom yang sama seperti data awal (termasuk kolom "
-            "'Rincian Output' pada sheet 'Daftar Paket')."
+            "File harus punya sheet 'Daftar RO' dan 'Daftar Paket'."
+            if st.session_state.analysis_mode == "excel"
+            else "Unggah salah satu file CSV data infrastruktur terdampak bencana."
         ),
     )
 
-    data_ok = False
-
-    if uploaded_file is not None:
+    if uploaded_file is not None and st.session_state.analysis_mode == "excel":
         try:
             df_ro, df_paket = load_data(uploaded_file)
             data_ok = True
@@ -1166,10 +1504,10 @@ with st.sidebar:
                 <span class="upload-meta">{fmt_num(len(df_paket), 0)} paket · {fmt_num(len(df_ro), 0)} baris RO</span>
             </div>
             """)
-    else:
+    elif uploaded_file is None:
         html("""
         <div class="upload-status upload-default">
-            📁 Belum ada data yang diunggah — silakan unggah file Excel untuk mulai analisis
+            📁 Belum ada data yang diunggah — silakan unggah file melalui panel ini
         </div>
         """)
 
@@ -1248,11 +1586,17 @@ with st.sidebar:
         html("</div>")
 
 
+if st.session_state.analysis_mode == "csv":
+    render_csv_analysis(uploaded_file)
+    st.stop()
+    raise SystemExit
+
+
 # =========================================================
 # STOP DI SINI KALAU BELUM ADA DATA YANG DIUNGGAH
 # =========================================================
 
-if not data_ok:
+if not data_ok or df_paket is None or df_ro is None:
     html("""
     <div class="dashboard-header">
         <div class="header-label">Dashboard Monitoring Infrastruktur</div>
@@ -1273,6 +1617,7 @@ if not data_ok:
     </div>
     """)
     st.stop()
+    raise SystemExit
 
 
 # =========================================================
