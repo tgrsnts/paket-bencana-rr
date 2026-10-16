@@ -110,6 +110,26 @@ def fmt_rupiah(value, decimals: int = 2, prefix: str = "Rp "):
     return f"{prefix}{fmt_num(value, decimals)}"
 
 
+def fmt_budget_compact(value) -> str:
+    """Format total anggaran dengan satuan yang ringkas dan mudah dibaca."""
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return "Rp -"
+    if pd.isna(amount):
+        return "Rp -"
+    if amount >= 1_000_000_000_000:
+        # Gunakan pemotongan satu desimal agar nilai besar tidak melonjak
+        # ke satuan berikutnya hanya karena pembulatan tampilan.
+        trillion_value = int(amount / 100_000_000_000) / 10
+        return f"Rp {fmt_num(trillion_value, 1)} T"
+    if amount >= 1_000_000_000:
+        return f"Rp {fmt_num(amount / 1_000_000_000, 2)} Miliar"
+    if amount >= 1_000_000:
+        return f"Rp {fmt_num(amount / 1_000_000, 2)} Juta"
+    return f"Rp {fmt_num(amount, 0)}"
+
+
 def fmt_num_id(value, decimals: int = 2):
     """Alias fmt_num (dipertahankan untuk kompatibilitas kode yang
     sudah memanggilnya secara eksplisit) — fmt_num sudah memakai
@@ -453,6 +473,118 @@ def load_data(file_source):
     return df_ro, df_paket
 
 
+@st.cache_data(show_spinner="Memproses data Rencana Induk DPR...")
+def load_dpr_excel_data(file_source):
+    """Membaca Excel Monitoring Output DPR dengan dukungan multi-header."""
+    xls = pd.ExcelFile(file_source)
+
+    if not xls.sheet_names:
+        raise ValueError("File Excel tidak memiliki sheet yang dapat dibaca.")
+
+    if "KEMEN PU" in xls.sheet_names:
+        # Pada template DPR, baris 3 berisi label kelompok dan baris 4
+        # berisi subheader tahun (keduanya 0-based: 2 dan 3).
+        raw_df = pd.read_excel(xls, sheet_name="KEMEN PU", header=[2, 3])
+        flattened_cols = []
+        for col in raw_df.columns:
+            parts = [str(part).strip() for part in col if not pd.isna(part)]
+            parts = [part for part in parts if not part.lower().startswith("unnamed")]
+            flattened_cols.append(" ".join(dict.fromkeys(parts)))
+        raw_df.columns = flattened_cols
+        df = raw_df
+    else:
+        sheet_name = "Sheet1" if "Sheet1" in xls.sheet_names else xls.sheet_names[0]
+        df = pd.read_excel(xls, sheet_name=sheet_name)
+
+    return process_dpr_dataframe(df)
+
+
+def process_dpr_dataframe(df):
+    """Menormalisasi kolom Excel DPR menjadi skema dashboard."""
+    df = df.copy()
+    rename_map = {}
+
+    exact_map = {
+        "provinsi": "Provinsi",
+        "kabupaten/kota": "Kabupaten",
+        "kabupaten/kota.1": "Kabupaten",
+        "program": "Program",
+        "kegiatan": "Kegiatan",
+        "rencana output (ro)": "Rincian_Output",
+        "rincian output (ro)": "Rincian_Output",
+    }
+    for column in df.columns:
+        normalized = _normalize_text(column)
+        if normalized in exact_map:
+            rename_map[column] = exact_map[normalized]
+        elif "kabupaten/kota" in normalized:
+            rename_map[column] = "Kabupaten"
+        elif "rencana output" in normalized or "rincian output" in normalized:
+            rename_map[column] = "Rincian_Output"
+        elif "pelaksanaan kegiatan" in normalized and "2026" in normalized:
+            rename_map[column] = "Progres_2026"
+        elif "pelaksanaan kegiatan" in normalized and "2027" in normalized:
+            rename_map[column] = "Progres_2027"
+        elif "pelaksanaan kegiatan" in normalized and "2028" in normalized:
+            rename_map[column] = "Progres_2028"
+        elif "rincian anggaran" in normalized and "2026" in normalized:
+            rename_map[column] = "Anggaran_2026"
+        elif "rincian anggaran" in normalized and "2027" in normalized:
+            rename_map[column] = "Anggaran_2027"
+        elif "rincian anggaran" in normalized and "2028" in normalized:
+            rename_map[column] = "Anggaran_2028"
+
+    df = df.rename(columns=rename_map)
+
+    # Header bertingkat pada template DPR dapat menghasilkan beberapa kolom
+    # dengan nama standar yang sama. Gabungkan nilainya agar setiap nama hanya
+    # memiliki satu Series saat diakses.
+    if df.columns.duplicated().any():
+        coalesced_df = pd.DataFrame(index=df.index)
+        for column in dict.fromkeys(df.columns):
+            same_name_columns = df.loc[:, df.columns == column]
+            coalesced_df[column] = same_name_columns.bfill(axis=1).iloc[:, 0]
+        df = coalesced_df
+
+    for column in ["Provinsi", "Kabupaten", "Program", "Kegiatan", "Rincian_Output"]:
+        if column not in df.columns:
+            df[column] = ""
+
+    valid_rows = (
+        df["Provinsi"].notna() & df["Provinsi"].astype(str).str.strip().ne("")
+    ) | (
+        df["Program"].notna() & df["Program"].astype(str).str.strip().ne("")
+    )
+    df = df.loc[valid_rows].copy()
+
+    # Beberapa template memakai angka tahun sebagai nama kolom anggaran.
+    for year in ("2026", "2027", "2028"):
+        if year in df.columns and f"Anggaran_{year}" not in df.columns:
+            df = df.rename(columns={year: f"Anggaran_{year}"})
+        budget_column = f"Anggaran_{year}"
+        budget_values = (
+            df[budget_column]
+            if budget_column in df.columns
+            else pd.Series(0, index=df.index)
+        )
+        df[budget_column] = pd.to_numeric(
+            budget_values, errors="coerce"
+        ).fillna(0)
+
+    for column in ["Progres_2026", "Progres_2027", "Progres_2028"]:
+        if column not in df.columns:
+            df[column] = 0
+        df[column] = pd.to_numeric(
+            df[column].astype("string").str.replace("%", "", regex=False),
+            errors="coerce",
+        ).fillna(0)
+
+    df["Total_Anggaran"] = (
+        df["Anggaran_2026"] + df["Anggaran_2027"] + df["Anggaran_2028"]
+    )
+    return df
+
+
 def find_col_by_keywords(df, keywords):
     for c in df.columns:
         cl = str(c).lower()
@@ -575,6 +707,144 @@ def normalize_csv_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         )
 
     return normalized
+
+
+def render_dpr_analysis(df_raw: pd.DataFrame, source_name: str = "") -> None:
+    """Render dashboard alokasi anggaran dan output DPR."""
+    df = process_dpr_dataframe(df_raw)
+    html(f"""
+    <div class="dashboard-header">
+        <div class="header-label">Dashboard Rencana Induk DPR · KEMEN PU</div>
+        <h1>📊 Monitoring Output &amp; Alokasi Anggaran Multitahun</h1>
+        <p>Analisis alokasi anggaran dan progres program per wilayah untuk tahun 2026–2028.</p>
+        {f'<div class="upload-meta" style="margin-top:10px;">📄 {source_name}</div>' if source_name else ""}
+    </div>
+    """)
+
+    filter_col_prov, filter_col_kab, filter_col_year = st.columns(3)
+    with filter_col_prov:
+        province_options = ["Semua Provinsi"] + sorted(
+            df["Provinsi"].dropna().astype(str).unique()
+        )
+        selected_prov = st.selectbox("📍 Provinsi", province_options, key="dpr_provinsi")
+    filtered_df = df if selected_prov == "Semua Provinsi" else df[
+        df["Provinsi"].astype(str) == selected_prov
+    ]
+
+    with filter_col_kab:
+        kabupaten_options = ["Semua Kabupaten/Kota"] + sorted(
+            filtered_df["Kabupaten"].dropna().astype(str).unique()
+        )
+        selected_kab = st.selectbox("🏘️ Kabupaten/Kota", kabupaten_options, key="dpr_kabupaten")
+    if selected_kab != "Semua Kabupaten/Kota":
+        filtered_df = filtered_df[filtered_df["Kabupaten"].astype(str) == selected_kab]
+
+    with filter_col_year:
+        selected_year = st.selectbox(
+            "📅 Tahun pelaksanaan",
+            ["Semua Tahun", "2026", "2027", "2028"],
+            key="dpr_tahun",
+        )
+
+    budget_column = (
+        f"Anggaran_{selected_year}" if selected_year != "Semua Tahun"
+        else "Total_Anggaran"
+    )
+    if selected_year != "Semua Tahun":
+        filtered_df = filtered_df[filtered_df[budget_column] > 0]
+
+    html('<div class="section-title">📊 Ringkasan Eksekutif</div>')
+    metric_columns = st.columns(4)
+    total_budget = filtered_df[budget_column].sum()
+    budget_label = fmt_budget_compact(total_budget)
+    metrics = [
+        ("Total Alokasi Anggaran", budget_label, "Sesuai filter tahun dan wilayah", "#e8f1fb", "💰"),
+        ("Jumlah Kegiatan/Program", fmt_num(len(filtered_df), 0), "Baris program terpilih", "#e8f8f1", "📋"),
+        ("Wilayah Provinsi", fmt_num(filtered_df["Provinsi"].nunique(), 0), "Provinsi terdata", "#fff5df", "📍"),
+        ("Wilayah Kab/Kota", fmt_num(filtered_df["Kabupaten"].nunique(), 0), "Kabupaten/kota terdata", "#eeeefe", "🏘️"),
+    ]
+    for metric_column, (title, value, subtitle, color, icon) in zip(metric_columns, metrics):
+        with metric_column:
+            html(f"""
+            <div class="metric-card">
+                <div class="metric-top">
+                    <div class="metric-title">{title}</div>
+                    <div class="metric-icon" style="background:{color};">{icon}</div>
+                </div>
+                <div class="metric-value">{value}</div>
+                <div class="metric-sub">{subtitle}</div>
+            </div>
+            """)
+
+    chart_col_year, chart_col_kab = st.columns(2)
+    with chart_col_year:
+        html('<div class="section-title">📈 Alokasi Anggaran Multitahun</div>')
+        budget_yearly = pd.DataFrame({
+            "Tahun": ["2026", "2027", "2028"],
+            "Anggaran (Miliar)": [
+                filtered_df[f"Anggaran_{year}"].sum() / 1e9
+                for year in ("2026", "2027", "2028")
+            ],
+        })
+        figure_yearly = px.bar(
+            budget_yearly, x="Tahun", y="Anggaran (Miliar)", text_auto=".2f",
+            color="Tahun", color_discrete_sequence=["#1F4E78", "#2E75B6", "#5B9BD5"],
+        )
+        figure_yearly.update_layout(height=320, showlegend=False, margin=dict(t=20, b=20))
+        st.plotly_chart(figure_yearly, width="stretch", config={"displayModeBar": False})
+
+    with chart_col_kab:
+        html('<div class="section-title">🏆 Top 5 Kabupaten/Kota</div>')
+        top_kab = (
+            filtered_df.groupby("Kabupaten", dropna=False)[budget_column]
+            .sum().reset_index().sort_values(budget_column, ascending=False).head(5)
+        )
+        top_kab["Anggaran (Miliar)"] = top_kab[budget_column] / 1e9
+        top_kab["Kabupaten"] = top_kab["Kabupaten"].fillna("Tidak diketahui")
+        figure_kab = px.bar(
+            top_kab, x="Anggaran (Miliar)", y="Kabupaten", orientation="h",
+            text_auto=".2f", color_discrete_sequence=["#f5b700"],
+        )
+        figure_kab.update_layout(
+            height=320, yaxis={"autorange": "reversed"}, margin=dict(t=20, b=20)
+        )
+        st.plotly_chart(figure_kab, width="stretch", config={"displayModeBar": False})
+
+    html('<div class="section-title">📋 Ringkasan Alokasi per Kabupaten / Kota</div>')
+    summary_df = (
+        filtered_df.assign(Kabupaten=filtered_df["Kabupaten"].fillna("Tidak diketahui"))
+        .groupby("Kabupaten", dropna=False)
+        .agg(
+            Jumlah_Kegiatan=("Program", "count"),
+            Anggaran_2026=("Anggaran_2026", "sum"),
+            Anggaran_2027=("Anggaran_2027", "sum"),
+            Anggaran_2028=("Anggaran_2028", "sum"),
+            Total_Anggaran=("Total_Anggaran", "sum"),
+        ).reset_index()
+    )
+    styled_dataframe(summary_df, {
+        "Anggaran_2026": fmt_rupiah, "Anggaran_2027": fmt_rupiah,
+        "Anggaran_2028": fmt_rupiah, "Total_Anggaran": fmt_rupiah,
+    })
+
+    html('<div class="section-title">🔍 Detail Program per Kabupaten / Kota</div>')
+    if filtered_df.empty:
+        st.info("Tidak ada data DPR untuk kombinasi filter yang dipilih.")
+        return
+    for kabupaten in sorted(filtered_df["Kabupaten"].dropna().astype(str).unique()):
+        kabupaten_data = filtered_df[filtered_df["Kabupaten"].astype(str) == kabupaten]
+        with st.expander(
+            f"📍 {kabupaten} · {len(kabupaten_data):,} program · "
+            f"Rp {fmt_num(kabupaten_data['Total_Anggaran'].sum(), 0)}"
+        ):
+            display_columns = [
+                column for column in [
+                    "Program", "Kegiatan", "Rincian_Output",
+                    "Anggaran_2026", "Anggaran_2027", "Anggaran_2028",
+                    "Progres_2026", "Progres_2027", "Progres_2028",
+                ] if column in kabupaten_data.columns
+            ]
+            st.dataframe(kabupaten_data[display_columns], width="stretch", hide_index=True)
 
 
 def render_csv_analysis(uploaded_csv) -> None:
@@ -1452,31 +1722,42 @@ with st.sidebar:
     """)
 
     html('<div class="filter-title">🔁&nbsp; Pilih Analisis</div>')
-    mode_col_rr, mode_col_csv = st.columns(2)
-    with mode_col_rr:
-        if st.button(
-            "Bencana RR",
-            type="primary" if st.session_state.analysis_mode == "excel" else "secondary",
-            width="stretch",
-            key="choose_excel_analysis",
-        ):
-            st.session_state.analysis_mode = "excel"
-            st.rerun()
-    with mode_col_csv:
-        if st.button(
-            "Infrastruktur CSV",
-            type="primary" if st.session_state.analysis_mode == "csv" else "secondary",
-            width="stretch",
-            key="choose_csv_analysis",
-        ):
-            st.session_state.analysis_mode = "csv"
-            st.rerun()
+    if st.button(
+        "Bencana RR",
+        type="primary" if st.session_state.analysis_mode == "excel" else "secondary",
+        width="stretch",
+        key="choose_excel_analysis",
+    ):
+        st.session_state.analysis_mode = "excel"
+        st.rerun()
+    if st.button(
+        "Infrastruktur CSV",
+        type="primary" if st.session_state.analysis_mode == "csv" else "secondary",
+        width="stretch",
+        key="choose_csv_analysis",
+    ):
+        st.session_state.analysis_mode = "csv"
+        st.rerun()
+    if st.button(
+        "DPR KEMEN PU",
+        type="primary" if st.session_state.analysis_mode == "dpr" else "secondary",
+        width="stretch",
+        key="choose_dpr_analysis",
+    ):
+        st.session_state.analysis_mode = "dpr"
+        st.rerun()
 
-    upload_type = ["xlsx"] if st.session_state.analysis_mode == "excel" else ["csv"]
+    upload_type = (
+        ["csv"] if st.session_state.analysis_mode == "csv" else ["xlsx"]
+    )
     upload_label = (
         "📤 Unggah data Bencana RR (.xlsx)"
         if st.session_state.analysis_mode == "excel"
-        else "📤 Unggah data Infrastruktur Terdampak (.csv)"
+        else (
+            "📤 Unggah data Infrastruktur Terdampak (.csv)"
+            if st.session_state.analysis_mode == "csv"
+            else "📤 Unggah data Rencana Induk DPR (.xlsx)"
+        )
     )
     html(f'<div class="filter-title">{upload_label}</div>')
     uploaded_file = st.file_uploader(
@@ -1486,7 +1767,11 @@ with st.sidebar:
         help=(
             "File harus punya sheet 'Daftar RO' dan 'Daftar Paket'."
             if st.session_state.analysis_mode == "excel"
-            else "Unggah salah satu file CSV data infrastruktur terdampak bencana."
+            else (
+                "Unggah salah satu file CSV data infrastruktur terdampak bencana."
+                if st.session_state.analysis_mode == "csv"
+                else "Sheet 'KEMEN PU' digunakan jika tersedia; jika tidak, sheet pertama akan dibaca."
+            )
         ),
     )
 
@@ -1504,6 +1789,19 @@ with st.sidebar:
                 <span class="upload-meta">{fmt_num(len(df_paket), 0)} paket · {fmt_num(len(df_ro), 0)} baris RO</span>
             </div>
             """)
+    elif uploaded_file is not None and st.session_state.analysis_mode == "dpr":
+        try:
+            dpr_df = load_dpr_excel_data(uploaded_file)
+            data_ok = True
+        except Exception as e:
+            st.error(f"Gagal memuat data DPR.\n\n**Detail:** {e}")
+        if data_ok:
+            html(f"""
+            <div class="upload-status upload-ok">
+                ✅ <b>{uploaded_file.name}</b> berhasil dimuat &amp; dianalisis
+                <span class="upload-meta">{fmt_num(len(dpr_df), 0)} baris program</span>
+            </div>
+            """)
     elif uploaded_file is None:
         html("""
         <div class="upload-status upload-default">
@@ -1513,7 +1811,7 @@ with st.sidebar:
 
     html("</div>")
 
-    if data_ok:
+    if data_ok and st.session_state.analysis_mode == "excel":
         # Semua data dimuat apa adanya — TIDAK ada filter "Pekerjaan Konstruksi"
         # yang diterapkan secara global di sini. Filter tersebut hanya
         # diterapkan secara lokal pada bagian-bagian tertentu di dashboard
@@ -1585,6 +1883,32 @@ with st.sidebar:
 
         html("</div>")
 
+
+if st.session_state.analysis_mode == "dpr":
+    if data_ok:
+        render_dpr_analysis(dpr_df, uploaded_file.name)
+    else:
+        html("""
+        <div class="dashboard-header">
+            <div class="header-label">Dashboard Rencana Induk DPR · KEMEN PU</div>
+            <h1>📊 Monitoring Output &amp; Alokasi Anggaran Multitahun</h1>
+            <p>Silakan unggah file Excel Monitoring Output DPR melalui panel di sebelah kiri.</p>
+        </div>
+        """)
+        html("""
+        <div class="content-card" style="text-align:center; padding:60px 20px;">
+            <div style="font-size:48px; margin-bottom:12px;">📂</div>
+            <div style="font-size:1.05rem; font-weight:800; color:#1F4E78; margin-bottom:6px;">
+                Belum Ada Data DPR untuk Dianalisis
+            </div>
+            <div style="font-size:0.85rem; color:#64748b; max-width:520px; margin:0 auto;">
+                Unggah file Excel DPR (.xlsx) melalui panel di sebelah kiri untuk
+                melihat alokasi anggaran dan rincian program.
+            </div>
+        </div>
+        """)
+    st.stop()
+    raise SystemExit
 
 if st.session_state.analysis_mode == "csv":
     render_csv_analysis(uploaded_file)
