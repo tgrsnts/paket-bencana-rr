@@ -626,13 +626,13 @@ def normalize_lokasi(raw) -> str | None:
 
 
 def normalize_kabupaten_kota(raw) -> str | None:
-    """Satukan variasi penulisan kabupaten/kota yang merujuk wilayah sama."""
+    """Satukan variasi kapitalisasi nama kabupaten/kota."""
     if pd.isna(raw):
         return None
     s = str(raw).strip()
     if not s:
         return None
-    return "Pidie" if s.casefold() == "pidie" else s
+    return s.title()
 
 
 def is_specific_kabupaten(raw, provinsi_name: str) -> bool:
