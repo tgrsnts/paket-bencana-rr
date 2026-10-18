@@ -579,6 +579,7 @@ def process_dpr_dataframe(df):
             errors="coerce",
         ).fillna(0)
 
+    df["Kabupaten"] = df["Kabupaten"].apply(normalize_kabupaten_kota)
     df["Total_Anggaran"] = (
         df["Anggaran_2026"] + df["Anggaran_2027"] + df["Anggaran_2028"]
     )
@@ -621,7 +622,17 @@ def normalize_lokasi(raw) -> str | None:
         if s.startswith(pref):
             s = s[len(pref):].strip()
             break
-    return s or None
+    return normalize_kabupaten_kota(s)
+
+
+def normalize_kabupaten_kota(raw) -> str | None:
+    """Satukan variasi penulisan kabupaten/kota yang merujuk wilayah sama."""
+    if pd.isna(raw):
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    return "Pidie" if s.casefold() == "pidie" else s
 
 
 def is_specific_kabupaten(raw, provinsi_name: str) -> bool:
@@ -700,6 +711,7 @@ def normalize_csv_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         if col not in normalized.columns:
             normalized[col] = None
 
+    normalized["Kabupaten"] = normalized["Kabupaten"].apply(normalize_kabupaten_kota)
     for col in ["Progres_TD", "Progres_RR"]:
         normalized[col] = pd.to_numeric(
             normalized[col].astype("string").str.replace("%", "", regex=False).str.strip(),
