@@ -687,6 +687,10 @@ def normalize_csv_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         "Kegiatan": "Nama_Infrastruktur",
         "KEGIATAN": "Nama_Infrastruktur",
         "Lokasi": "Nama_Infrastruktur",
+        "Status_Jalan": "Kewenangan",
+        "Status": "Kewenangan",
+        "Status_Kewenangan": "Kewenangan",
+        "Kewenangan": "Kewenangan",
         "Progres_TD": "Progres_TD",
         "Progres_Fisik_TD": "Progres_TD",
         "Progres_Persen": "Progres_TD",
@@ -704,6 +708,7 @@ def normalize_csv_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         "Provinsi",
         "Kabupaten",
         "Nama_Infrastruktur",
+        "Kewenangan",
         "Progres_TD",
         "Progres_RR",
     ]
@@ -1072,6 +1077,7 @@ def render_csv_analysis(uploaded_csv) -> None:
             "Kecamatan",
             "Tingkat_Kerusakan",
             "Status_Penanganan",
+            "Kewenangan",
             "Progres_TD",
             "Progres_RR",
         ]
