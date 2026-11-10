@@ -2849,18 +2849,37 @@ if not df_map.empty:
             marker_color, status_text = "green", "Progress Baik"
 
         popup_html = f"""
-        <div style="font-family:Inter,sans-serif;min-width:260px;padding:5px;">
-            <div style="font-size:14px;font-weight:bold;color:#123;margin-bottom:8px;">
+        <div style="width:235px;box-sizing:border-box;font-family:Arial,sans-serif;
+                    color:#334155;background:#ffffff;border:1px solid #dbe3ec;
+                    border-radius:8px;overflow:hidden;">
+            <div style="padding:9px 11px;background:#124d7c;color:#ffffff;
+                        font-size:11px;font-weight:700;line-height:1.35;">
                 {row['Nama Paket']}
             </div>
-            <hr style="border:0;border-top:1px solid #ddd;">
-            <div style="margin:6px 0;"><b>Provinsi</b><br>{row['Provinsi']}</div>
-            <div style="margin:6px 0;"><b>Unit Organisasi</b><br>{row['Unit Organisasi']}</div>
-            <div style="margin:6px 0;"><b>Pagu</b><br>Rp {fmt_num(row['Pagu (paket) (Rp ribu)'] * 1000, 0)}</div>
-            <div style="margin:6px 0;">
-                <b>Progress Fisik</b><br>
-                <span style="color:{marker_color};font-weight:bold;font-size:15px;">{fmt_num(progress, 2)}%</span>
-                &nbsp;— {status_text}
+            <div style="padding:8px 11px 9px;font-size:10px;line-height:1.35;">
+                <div style="padding:4px 0 6px;border-bottom:1px solid #eef2f6;">
+                    <div style="color:#64748b;font-weight:700;">Provinsi</div>
+                    <div style="margin-top:2px;">{row['Provinsi']}</div>
+                </div>
+                <div style="padding:6px 0;border-bottom:1px solid #eef2f6;">
+                    <div style="color:#64748b;font-weight:700;">Unit Organisasi</div>
+                    <div style="margin-top:2px;">{row['Unit Organisasi']}</div>
+                </div>
+                <div style="padding:6px 0;border-bottom:1px solid #eef2f6;">
+                    <div style="color:#64748b;font-weight:700;">Pagu</div>
+                    <div style="margin-top:2px;font-weight:700;color:#0f766e;">
+                        Rp {fmt_num(row['Pagu (paket) (Rp ribu)'] * 1000, 0)}
+                    </div>
+                </div>
+                <div style="padding:6px 0 2px;">
+                    <div style="color:#64748b;font-weight:700;">Progress Fisik</div>
+                    <div style="margin-top:2px;">
+                        <span style="color:{marker_color};font-weight:700;">
+                            {fmt_num(progress, 2)}%
+                        </span>
+                        <span style="color:#64748b;"> · {status_text}</span>
+                    </div>
+                </div>
             </div>
         </div>
         """
@@ -2868,7 +2887,7 @@ if not df_map.empty:
         folium.CircleMarker(
             location=[row["Latitude"], row["Longitude"]],
             radius=7,
-            popup=folium.Popup(popup_html, max_width=330),
+            popup=folium.Popup(popup_html, max_width=260),
             tooltip=f"{row['Nama Paket']} — {fmt_num(progress, 1)}%",
             color=marker_color,
             weight=2,
