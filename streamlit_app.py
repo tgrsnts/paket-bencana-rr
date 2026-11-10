@@ -406,6 +406,64 @@ def get_satuan_for_kategori(kategori_name: str) -> str:
 REQUIRED_SHEETS = ["Daftar RO", "Daftar Paket"]
 
 
+def _column_key(value) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value).strip().lower())
+
+
+def normalize_paket_columns(df):
+    """Sesuaikan header dan satuan nominal file Bencana RR ke skema dashboard."""
+    df = df.copy()
+    columns_by_key = {}
+    for column in df.columns:
+        columns_by_key.setdefault(_column_key(column), column)
+
+    def find_column(*names):
+        for name in names:
+            column = columns_by_key.get(_column_key(name))
+            if column is not None:
+                return column
+        return None
+
+    pagu_col = find_column("Pagu (paket) (Rp ribu)", "Pagu (paket)")
+    realisasi_col = find_column(
+        "Realisasi (paket) (Rp ribu)", "Realisasi (paket)"
+    )
+    real_keu_col = find_column("Real. Keu (%)")
+
+    if pagu_col is not None and pagu_col != "Pagu (paket) (Rp ribu)":
+        df["Pagu (paket) (Rp ribu)"] = pd.to_numeric(
+            df[pagu_col], errors="coerce"
+        ) / 1000
+
+    if (
+        realisasi_col is not None
+        and realisasi_col != "Realisasi (paket) (Rp ribu)"
+    ):
+        df["Realisasi (paket) (Rp ribu)"] = pd.to_numeric(
+            df[realisasi_col], errors="coerce"
+        ) / 1000
+    elif (
+        realisasi_col is None
+        and pagu_col is not None
+        and real_keu_col is not None
+    ):
+        pagu = pd.to_numeric(df[pagu_col], errors="coerce")
+        real_keu = pd.to_numeric(df[real_keu_col], errors="coerce")
+        df["Realisasi (paket) (Rp ribu)"] = pagu * real_keu / 100 / 1000
+
+    rename_map = {}
+    for expected in (
+        "Unit Organisasi",
+        "Provinsi",
+        "Jenis Bencana",
+        "Real. Fis (%)",
+    ):
+        source = find_column(expected)
+        if source is not None and source != expected:
+            rename_map[source] = expected
+    return df.rename(columns=rename_map)
+
+
 def find_rincian_output_col(df):
     """Cari kolom 'Rincian Output' secara fleksibel di sheet 'Daftar Paket'."""
     # 1) nama persis
@@ -447,6 +505,7 @@ def load_data(file_source):
         )
     df_ro = pd.read_excel(xls, sheet_name="Daftar RO")
     df_paket = pd.read_excel(xls, sheet_name="Daftar Paket")
+    df_paket = normalize_paket_columns(df_paket)
 
     # Kolom "Kategori" di sheet 'Daftar Paket' adalah kolom BAWAAN dari data
     # (mis. menandai "Pekerjaan Konstruksi" vs jenis lain) — TIDAK ditimpa.
